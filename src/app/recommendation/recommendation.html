@@ -1,0 +1,64 @@
+<!-- <div *ngFor="let stock of data">
+    <mat-card class="m-2">
+        <mat-card-title>{{ stock.symbol }}</mat-card-title>
+        <mat-card-content>
+            <p>Strong Buy: {{ stock.strongBuy }}</p>
+            <p>Buy: {{ stock.buy }}</p>
+            <p>Hold: {{ stock.hold }}</p>
+            <p>Sell: {{ stock.sell }}</p>
+            <p>Strong Sell: {{ stock.strongSell }}</p>
+        </mat-card-content>
+    </mat-card>
+</div> -->
+
+<table mat-table [dataSource]="dataSource" class="mat-elevation-z8">
+
+    <ng-container matColumnDef="date">
+        <th mat-header-cell *matHeaderCellDef> Date </th>
+        <td mat-cell *matCellDef="let element"> {{ element.publishedDate | date:'short' }} </td>
+    </ng-container>
+
+    <ng-container matColumnDef="symbol">
+        <th mat-header-cell *matHeaderCellDef> Symbol </th>
+        <td mat-cell *matCellDef="let element">
+            <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank">
+                {{ element.symbol }}
+            </a>
+        </td>
+    </ng-container>
+
+    <ng-container matColumnDef="company">
+        <th mat-header-cell *matHeaderCellDef> Analyst </th>
+        <td mat-cell *matCellDef="let element"> {{ element.gradingCompany }} </td>
+    </ng-container>
+
+    <ng-container matColumnDef="action">
+        <th mat-header-cell *matHeaderCellDef> Action </th>
+        <td mat-cell *matCellDef="let element"> {{ element.action }} </td>
+    </ng-container>
+
+    <ng-container matColumnDef="newGrade">
+        <th mat-header-cell *matHeaderCellDef> New Grade </th>
+        <td mat-cell *matCellDef="let element"> {{ element.newGrade }} </td>
+    </ng-container>
+
+    <ng-container matColumnDef="previousGrade">
+        <th mat-header-cell *matHeaderCellDef> Prev Grade </th>
+        <td mat-cell *matCellDef="let element"> {{ element.previousGrade || '—' }} </td>
+    </ng-container>
+
+    <ng-container matColumnDef="price">
+        <th mat-header-cell *matHeaderCellDef> Price </th>
+        <td mat-cell *matCellDef="let element"> ${{ element.priceWhenPosted }} </td>
+    </ng-container>
+
+    <ng-container matColumnDef="source">
+        <th mat-header-cell *matHeaderCellDef> Source </th>
+        <td mat-cell *matCellDef="let element">
+            <a [href]="element.newsURL" target="_blank">{{ element.newsPublisher }}</a>
+        </td>
+    </ng-container>
+
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+</table>
