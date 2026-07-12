@@ -1,6 +1,7 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { MatTableModule, MatTableDataSource } from '@angular/material/table';
+import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Subject, takeUntil } from 'rxjs';
 import { SupabaseService } from '../../services/supabase.service';
@@ -11,6 +12,7 @@ import { SupabaseService } from '../../services/supabase.service';
   imports: [
     CommonModule,
     MatTableModule,
+    MatSortModule,
     MatProgressSpinnerModule,
     DecimalPipe
   ],
@@ -35,10 +37,10 @@ import { SupabaseService } from '../../services/supabase.service';
           <div class="table-header bullish-header">
             🟢 BULLISH CUSTOM SETUPS
           </div>
-          <table mat-table [dataSource]="bullishDataSource" class="mat-elevation-z2">
+          <table mat-table [dataSource]="bullishDataSource" matSort #bullishSort="matSort" matSortActive="score" matSortDirection="desc" class="mat-elevation-z2">
             <!-- Symbol -->
             <ng-container matColumnDef="symbol">
-              <th mat-header-cell *matHeaderCellDef> Symbol </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Symbol </th>
               <td mat-cell *matCellDef="let element">
                 <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" class="sym-link">
                   {{ element.symbol }}
@@ -48,7 +50,7 @@ import { SupabaseService } from '../../services/supabase.service';
 
             <!-- Price -->
             <ng-container matColumnDef="price">
-              <th mat-header-cell *matHeaderCellDef> Price </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Price </th>
               <td mat-cell *matCellDef="let element">
                 \${{ element.price | number: '1.2-2' }}
               </td>
@@ -56,7 +58,7 @@ import { SupabaseService } from '../../services/supabase.service';
 
             <!-- Chg % -->
             <ng-container matColumnDef="change_pct">
-              <th mat-header-cell *matHeaderCellDef> Chg % </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Chg % </th>
               <td mat-cell *matCellDef="let element" [ngStyle]="{'color': element.change_pct >= 0 ? '#00ff88' : '#ff4a4a'}">
                 {{ element.change_pct | number: '1.2-2' }}%
               </td>
@@ -64,7 +66,7 @@ import { SupabaseService } from '../../services/supabase.service';
 
             <!-- RVOL -->
             <ng-container matColumnDef="rvol">
-              <th mat-header-cell *matHeaderCellDef> RVOL </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> RVOL </th>
               <td mat-cell *matCellDef="let element">
                 {{ element.rvol | number: '1.2-2' }}x
               </td>
@@ -72,7 +74,7 @@ import { SupabaseService } from '../../services/supabase.service';
 
             <!-- VWAP Dist -->
             <ng-container matColumnDef="vwap_dist">
-              <th mat-header-cell *matHeaderCellDef> VWAP % </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> VWAP % </th>
               <td mat-cell *matCellDef="let element" [ngStyle]="{'color': element.vwap_dist >= 0 ? '#00ff88' : '#ff4a4a'}">
                 {{ element.vwap_dist | number: '1.2-2' }}%
               </td>
@@ -80,7 +82,7 @@ import { SupabaseService } from '../../services/supabase.service';
 
             <!-- Score -->
             <ng-container matColumnDef="score">
-              <th mat-header-cell *matHeaderCellDef> Score </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Score </th>
               <td mat-cell *matCellDef="let element" style="font-weight: bold; color: #00ff88;">
                 {{ element.score }}/5
               </td>
@@ -88,7 +90,7 @@ import { SupabaseService } from '../../services/supabase.service';
 
             <!-- Age -->
             <ng-container matColumnDef="age">
-              <th mat-header-cell *matHeaderCellDef> Age </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Age </th>
               <td mat-cell *matCellDef="let element" style="color: #888;">
                 {{ element.age || '-' }}
               </td>
@@ -107,10 +109,10 @@ import { SupabaseService } from '../../services/supabase.service';
           <div class="table-header bearish-header">
             🔴 BEARISH CUSTOM SETUPS
           </div>
-          <table mat-table [dataSource]="bearishDataSource" class="mat-elevation-z2">
+          <table mat-table [dataSource]="bearishDataSource" matSort #bearishSort="matSort" matSortActive="score" matSortDirection="desc" class="mat-elevation-z2">
             <!-- Symbol -->
             <ng-container matColumnDef="symbol">
-              <th mat-header-cell *matHeaderCellDef> Symbol </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Symbol </th>
               <td mat-cell *matCellDef="let element">
                 <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" class="sym-link">
                   {{ element.symbol }}
@@ -120,7 +122,7 @@ import { SupabaseService } from '../../services/supabase.service';
 
             <!-- Price -->
             <ng-container matColumnDef="price">
-              <th mat-header-cell *matHeaderCellDef> Price </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Price </th>
               <td mat-cell *matCellDef="let element">
                 \${{ element.price | number: '1.2-2' }}
               </td>
@@ -128,7 +130,7 @@ import { SupabaseService } from '../../services/supabase.service';
 
             <!-- Chg % -->
             <ng-container matColumnDef="change_pct">
-              <th mat-header-cell *matHeaderCellDef> Chg % </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Chg % </th>
               <td mat-cell *matCellDef="let element" [ngStyle]="{'color': element.change_pct >= 0 ? '#00ff88' : '#ff4a4a'}">
                 {{ element.change_pct | number: '1.2-2' }}%
               </td>
@@ -136,7 +138,7 @@ import { SupabaseService } from '../../services/supabase.service';
 
             <!-- RVOL -->
             <ng-container matColumnDef="rvol">
-              <th mat-header-cell *matHeaderCellDef> RVOL </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> RVOL </th>
               <td mat-cell *matCellDef="let element">
                 {{ element.rvol | number: '1.2-2' }}x
               </td>
@@ -144,7 +146,7 @@ import { SupabaseService } from '../../services/supabase.service';
 
             <!-- VWAP Dist -->
             <ng-container matColumnDef="vwap_dist">
-              <th mat-header-cell *matHeaderCellDef> VWAP % </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> VWAP % </th>
               <td mat-cell *matCellDef="let element" [ngStyle]="{'color': element.vwap_dist >= 0 ? '#00ff88' : '#ff4a4a'}">
                 {{ element.vwap_dist | number: '1.2-2' }}%
               </td>
@@ -152,7 +154,7 @@ import { SupabaseService } from '../../services/supabase.service';
 
             <!-- Score -->
             <ng-container matColumnDef="score">
-              <th mat-header-cell *matHeaderCellDef> Score </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Score </th>
               <td mat-cell *matCellDef="let element" style="font-weight: bold; color: #ff4a4a;">
                 {{ element.score }}/5
               </td>
@@ -160,7 +162,7 @@ import { SupabaseService } from '../../services/supabase.service';
 
             <!-- Age -->
             <ng-container matColumnDef="age">
-              <th mat-header-cell *matHeaderCellDef> Age </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Age </th>
               <td mat-cell *matCellDef="let element" style="color: #888;">
                 {{ element.age || '-' }}
               </td>
@@ -237,7 +239,7 @@ import { SupabaseService } from '../../services/supabase.service';
       font-size: 0.8rem;
     }
     td {
-      color: #e0e3eb !important;
+      color: #e0e3eb;
       font-size: 0.85rem;
       border-bottom-color: #2a2e39 !important;
     }
@@ -259,6 +261,12 @@ import { SupabaseService } from '../../services/supabase.service';
       background-color: #131722;
       font-size: 0.85rem;
     }
+    ::ng-deep .mat-sort-header-container {
+      justify-content: flex-start;
+    }
+    ::ng-deep .mat-sort-header-arrow {
+      color: #888 !important;
+    }
   `]
 })
 export class CustomGroup implements OnInit, OnDestroy {
@@ -270,6 +278,13 @@ export class CustomGroup implements OnInit, OnDestroy {
   bearishDataSource = new MatTableDataSource<any>([]);
 
   private destroy$ = new Subject<void>();
+
+  @ViewChild('bullishSort', { static: false }) set bullishSort(sort: MatSort) {
+    this.bullishDataSource.sort = sort;
+  }
+  @ViewChild('bearishSort', { static: false }) set bearishSort(sort: MatSort) {
+    this.bearishDataSource.sort = sort;
+  }
 
   constructor(
     private supabaseService: SupabaseService,
@@ -289,12 +304,15 @@ export class CustomGroup implements OnInit, OnDestroy {
           // Filter for Custom List setups only
           const customSetups = data.filter(s => s.group_name === 'Custom List');
           
-          this.allSetups = customSetups;
-          this.bullishDataSource.data = customSetups.filter(s => s.direction === 'bullish');
-          this.bearishDataSource.data = customSetups.filter(s => s.direction === 'bearish');
+          // Deduplicate
+          const uniqueCustom = Array.from(
+            new Map(customSetups.map(item => [item.symbol, item])).values()
+          );
+
+          this.allSetups = uniqueCustom;
+          this.bullishDataSource.data = uniqueCustom.filter(s => s.direction === 'bullish');
+          this.bearishDataSource.data = uniqueCustom.filter(s => s.direction === 'bearish');
           this.loading = false;
-          
-          // Force UI change detection manually
           this.cdr.detectChanges();
         },
         error: (err) => {

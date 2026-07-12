@@ -24,11 +24,11 @@ import { CustomGroup } from "./custom-group/custom-group";
     template: `
     <mat-toolbar color="primary">NSS Group - Stock Recommendations</mat-toolbar>
     <div class="m-2">
-      <button mat-button (click)="view = 'recommendations'">View Recommendations</button>
-      <button mat-button (click)="view = 'mostactive'">View Most Active</button>
-      <button mat-button (click)="view = 'watchlist'">Watch List</button>
       <button mat-button (click)="view = 'screener'">Golden/Death Cross Screener</button>
       <button mat-button (click)="view = 'custom-group'">Custom Group</button>
+      <button mat-button (click)="view = 'watchlist'">Watch List</button>
+      <button mat-button (click)="view = 'recommendations'">View Recommendations</button>
+      <button mat-button (click)="view = 'mostactive'">View Most Active</button>
     </div>
     <app-recommendation *ngIf="view === 'recommendations'"></app-recommendation>
     <app-watchlist *ngIf="view === 'watchlist'"></app-watchlist>
@@ -38,5 +38,5 @@ import { CustomGroup } from "./custom-group/custom-group";
 })
 
 export class App {
-    view = 'recommendations';
+    view = 'screener';
 }
