@@ -6,6 +6,7 @@ import { MostActive } from "./most-active/most-active";
 import { CommonModule } from '@angular/common';
 import { Watchlist } from "./watchlist/watchlist";
 import { Screener } from "./screener/screener";
+import { CustomGroup } from "./custom-group/custom-group";
 
 @Component({
     selector: 'app-root',
@@ -17,7 +18,8 @@ import { Screener } from "./screener/screener";
         MatButtonModule,
         MostActive,
         Watchlist,
-        Screener
+        Screener,
+        CustomGroup
     ],
     template: `
     <mat-toolbar color="primary">NSS Group - Stock Recommendations</mat-toolbar>
@@ -26,11 +28,13 @@ import { Screener } from "./screener/screener";
       <button mat-button (click)="view = 'mostactive'">View Most Active</button>
       <button mat-button (click)="view = 'watchlist'">Watch List</button>
       <button mat-button (click)="view = 'screener'">Golden/Death Cross Screener</button>
+      <button mat-button (click)="view = 'custom-group'">Custom Group</button>
     </div>
     <app-recommendation *ngIf="view === 'recommendations'"></app-recommendation>
     <app-watchlist *ngIf="view === 'watchlist'"></app-watchlist>
     <app-most-active *ngIf="view === 'mostactive'"></app-most-active>
-    <app-screener *ngIf="view === 'screener'"></app-screener>`
+    <app-screener *ngIf="view === 'screener'"></app-screener>
+    <app-custom-group *ngIf="view === 'custom-group'"></app-custom-group>`
 })
 
 export class App {

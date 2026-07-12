@@ -6,7 +6,7 @@ import { Subject, takeUntil } from 'rxjs';
 import { SupabaseService } from '../../services/supabase.service';
 
 @Component({
-  selector: 'app-screener',
+  selector: 'app-custom-group',
   standalone: true,
   imports: [
     CommonModule,
@@ -16,15 +16,15 @@ import { SupabaseService } from '../../services/supabase.service';
   ],
   template: `
     <div class="screener-container">
-      <h2>Golden/Death Cross Screener</h2>
+      <h2>Custom List Screener</h2>
 
       <div *ngIf="loading" class="spinner-container">
         <mat-spinner diameter="40"></mat-spinner>
-        <p>Loading setups from database...</p>
+        <p>Loading custom setups from database...</p>
       </div>
 
       <div *ngIf="!loading && allSetups.length === 0" class="no-data">
-        No active setups found. Make sure your TradingView alerts are active and pushing data.
+        No active setups found for Custom List. Make sure your "Custom List" alert is running in TradingView.
       </div>
 
       <!-- Side-by-Side Tables Layout -->
@@ -33,7 +33,7 @@ import { SupabaseService } from '../../services/supabase.service';
         <!-- Bullish Table -->
         <div class="table-wrapper bullish-wrapper">
           <div class="table-header bullish-header">
-            🟢 ALL BULLISH SETUPS
+            🟢 BULLISH CUSTOM SETUPS
           </div>
           <table mat-table [dataSource]="bullishDataSource" class="mat-elevation-z2">
             <!-- Symbol -->
@@ -94,14 +94,6 @@ import { SupabaseService } from '../../services/supabase.service';
               </td>
             </ng-container>
 
-            <!-- Group Name -->
-            <ng-container matColumnDef="group_name">
-              <th mat-header-cell *matHeaderCellDef> Group </th>
-              <td mat-cell *matCellDef="let element" class="group-cell">
-                {{ element.group_name }}
-              </td>
-            </ng-container>
-
             <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
             <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
           </table>
@@ -113,7 +105,7 @@ import { SupabaseService } from '../../services/supabase.service';
         <!-- Bearish Table -->
         <div class="table-wrapper bearish-wrapper">
           <div class="table-header bearish-header">
-            🔴 ALL BEARISH SETUPS
+            🔴 BEARISH CUSTOM SETUPS
           </div>
           <table mat-table [dataSource]="bearishDataSource" class="mat-elevation-z2">
             <!-- Symbol -->
@@ -174,14 +166,6 @@ import { SupabaseService } from '../../services/supabase.service';
               </td>
             </ng-container>
 
-            <!-- Group Name -->
-            <ng-container matColumnDef="group_name">
-              <th mat-header-cell *matHeaderCellDef> Group </th>
-              <td mat-cell *matCellDef="let element" class="group-cell">
-                {{ element.group_name }}
-              </td>
-            </ng-container>
-
             <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
             <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
           </table>
@@ -225,7 +209,7 @@ import { SupabaseService } from '../../services/supabase.service';
     }
     .table-wrapper {
       flex: 1;
-      min-width: 360px;
+      min-width: 340px;
       background: #1e1e1e;
       border-radius: 6px;
       overflow: hidden;
@@ -275,14 +259,10 @@ import { SupabaseService } from '../../services/supabase.service';
       background-color: #131722;
       font-size: 0.85rem;
     }
-    .group-cell {
-      color: #9e9e9e !important;
-      font-size: 0.75rem !important;
-    }
   `]
 })
-export class Screener implements OnInit, OnDestroy {
-  displayedColumns = ['symbol', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'age', 'group_name'];
+export class CustomGroup implements OnInit, OnDestroy {
+  displayedColumns = ['symbol', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'age'];
   allSetups: any[] = [];
   loading = true;
   
@@ -306,12 +286,12 @@ export class Screener implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (data) => {
-          // Filter out Custom List setups from the main panel
-          const mainSetups = data.filter(s => s.group_name !== 'Custom List');
+          // Filter for Custom List setups only
+          const customSetups = data.filter(s => s.group_name === 'Custom List');
           
-          this.allSetups = mainSetups;
-          this.bullishDataSource.data = mainSetups.filter(s => s.direction === 'bullish');
-          this.bearishDataSource.data = mainSetups.filter(s => s.direction === 'bearish');
+          this.allSetups = customSetups;
+          this.bullishDataSource.data = customSetups.filter(s => s.direction === 'bullish');
+          this.bearishDataSource.data = customSetups.filter(s => s.direction === 'bearish');
           this.loading = false;
           
           // Force UI change detection manually
