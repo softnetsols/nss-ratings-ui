@@ -47,9 +47,13 @@ import { SupabaseService } from '../../services/supabase.service';
             <ng-container matColumnDef="symbol">
               <th mat-header-cell *matHeaderCellDef mat-sort-header> Symbol </th>
               <td mat-cell *matCellDef="let element">
-                <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" class="sym-link">
-                  {{ element.symbol }}
-                </a>
+                <div class="symbol-container">
+                  <span class="symbol-text">{{ element.symbol }}</span>
+                  <div class="link-icons">
+                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + element.symbol" target="_blank" title="Open TradingView Chart" class="link-badge tv-badge">TV</a>
+                    <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" title="Open Finviz Analysis" class="link-badge fv-badge">FV</a>
+                  </div>
+                </div>
               </td>
             </ng-container>
 
@@ -119,9 +123,13 @@ import { SupabaseService } from '../../services/supabase.service';
             <ng-container matColumnDef="symbol">
               <th mat-header-cell *matHeaderCellDef mat-sort-header> Symbol </th>
               <td mat-cell *matCellDef="let element">
-                <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" class="sym-link">
-                  {{ element.symbol }}
-                </a>
+                <div class="symbol-container">
+                  <span class="symbol-text">{{ element.symbol }}</span>
+                  <div class="link-icons">
+                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + element.symbol" target="_blank" title="Open TradingView Chart" class="link-badge tv-badge">TV</a>
+                    <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" title="Open Finviz Analysis" class="link-badge fv-badge">FV</a>
+                  </div>
+                </div>
               </td>
             </ng-container>
 
@@ -264,13 +272,40 @@ import { SupabaseService } from '../../services/supabase.service';
     tr:hover td {
       background-color: #1c2030 !important;
     }
-    .sym-link {
-      color: #29b6f6;
-      text-decoration: none;
-      font-weight: bold;
+    .symbol-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
-    .sym-link:hover {
-      text-decoration: underline;
+    .symbol-text {
+      font-weight: bold;
+      color: #29b6f6;
+    }
+    .link-icons {
+      display: flex;
+      gap: 4px;
+    }
+    .link-badge {
+      font-size: 0.6rem;
+      font-weight: bold;
+      padding: 1px 4px;
+      border-radius: 3px;
+      text-decoration: none;
+      transition: background 0.2s ease;
+    }
+    .tv-badge {
+      background-color: #2962ff;
+      color: white !important;
+    }
+    .tv-badge:hover {
+      background-color: #1565c0;
+    }
+    .fv-badge {
+      background-color: #388e3c;
+      color: white !important;
+    }
+    .fv-badge:hover {
+      background-color: #2e7d32;
     }
     .empty-list-msg {
       padding: 16px;
@@ -313,7 +348,6 @@ export class CustomGroup implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.fetchData();
 
-    // Smart Polling: Fetch new setups every 15 seconds, but only if the user is active on the page
     this.pollInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         this.fetchData(false);
