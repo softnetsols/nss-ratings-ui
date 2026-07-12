@@ -18,9 +18,14 @@ import { SupabaseService } from '../../services/supabase.service';
   ],
   template: `
     <div class="screener-container">
-      <h2>Golden/Death Cross Screener</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>Golden/Death Cross Screener</h2>
+        <span class="refresh-indicator" [class.syncing]="loading">
+          {{ loading ? 'Updating...' : 'Auto-refreshing in 15s' }}
+        </span>
+      </div>
 
-      <div *ngIf="loading" class="spinner-container">
+      <div *ngIf="loading && allSetups.length === 0" class="spinner-container">
         <mat-spinner diameter="40"></mat-spinner>
         <p>Loading setups from database...</p>
       </div>
@@ -30,7 +35,7 @@ import { SupabaseService } from '../../services/supabase.service';
       </div>
 
       <!-- Side-by-Side Tables Layout -->
-      <div *ngIf="!loading && allSetups.length > 0" class="tables-grid">
+      <div *ngIf="allSetups.length > 0" class="tables-grid">
         
         <!-- Bullish Table -->
         <div class="table-wrapper bullish-wrapper">
@@ -120,7 +125,7 @@ import { SupabaseService } from '../../services/supabase.service';
           <table mat-table [dataSource]="bearishDataSource" matSort #bearishSort="matSort" matSortActive="score" matSortDirection="desc" class="mat-elevation-z2">
             <!-- Symbol -->
             <ng-container matColumnDef="symbol">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Symbol </th>
+              <th mat-header-cell *matHeaderCellDef> Symbol </th>
               <td mat-cell *matCellDef="let element">
                 <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" class="sym-link">
                   {{ element.symbol }}
@@ -201,8 +206,20 @@ import { SupabaseService } from '../../services/supabase.service';
       font-family: Roboto, "Helvetica Neue", sans-serif;
     }
     h2 {
-      margin-bottom: 16px;
+      margin: 0;
       color: #333;
+    }
+    .refresh-indicator {
+      font-size: 0.75rem;
+      color: #777;
+      background: #f0f2f5;
+      padding: 4px 8px;
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
+    .syncing {
+      background: #e3f2fd;
+      color: #1976d2;
     }
     .spinner-container {
       display: flex;
@@ -223,6 +240,7 @@ import { SupabaseService } from '../../services/supabase.service';
       display: flex;
       flex-wrap: wrap;
       gap: 24px;
+      margin-top: 16px;
       align-items: flex-start;
     }
     .table-wrapper {
@@ -298,8 +316,8 @@ export class Screener implements OnInit, OnDestroy {
   bearishDataSource = new MatTableDataSource<any>([]);
 
   private destroy$ = new Subject<void>();
+  private pollInterval: any;
 
-  // Use setter to dynamically bind the MatSort references once they are loaded
   @ViewChild('bullishSort', { static: false }) set bullishSort(sort: MatSort) {
     this.bullishDataSource.sort = sort;
   }
@@ -314,18 +332,25 @@ export class Screener implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.fetchData();
+
+    // Smart Polling: Fetch new setups every 15 seconds, but only if the user is active on the page
+    this.pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        this.fetchData(false); // fetch in background without showing main loading spinner
+      }
+    }, 15000);
   }
 
-  fetchData(): void {
-    this.loading = true;
+  fetchData(showSpinner = true): void {
+    if (showSpinner) {
+      this.loading = true;
+    }
     this.supabaseService.getScreenerSetups()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (data) => {
-          // 1. Filter out Custom List setups from the main screen
           const mainSetups = data.filter(s => s.group_name !== 'Custom List');
           
-          // 2. Filter out duplicates based on symbol and group name
           const uniqueSetups = Array.from(
             new Map(mainSetups.map(item => [item.symbol + '_' + item.group_name, item])).values()
           );
@@ -334,8 +359,6 @@ export class Screener implements OnInit, OnDestroy {
           this.bullishDataSource.data = uniqueSetups.filter(s => s.direction === 'bullish');
           this.bearishDataSource.data = uniqueSetups.filter(s => s.direction === 'bearish');
           this.loading = false;
-          
-          // Force Angular UI update
           this.cdr.detectChanges();
         },
         error: (err) => {
@@ -349,5 +372,8 @@ export class Screener implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+    }
   }
 }

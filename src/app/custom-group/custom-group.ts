@@ -18,9 +18,14 @@ import { SupabaseService } from '../../services/supabase.service';
   ],
   template: `
     <div class="screener-container">
-      <h2>Custom List Screener</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>Custom List Screener</h2>
+        <span class="refresh-indicator" [class.syncing]="loading">
+          {{ loading ? 'Updating...' : 'Auto-refreshing in 15s' }}
+        </span>
+      </div>
 
-      <div *ngIf="loading" class="spinner-container">
+      <div *ngIf="loading && allSetups.length === 0" class="spinner-container">
         <mat-spinner diameter="40"></mat-spinner>
         <p>Loading custom setups from database...</p>
       </div>
@@ -30,7 +35,7 @@ import { SupabaseService } from '../../services/supabase.service';
       </div>
 
       <!-- Side-by-Side Tables Layout -->
-      <div *ngIf="!loading && allSetups.length > 0" class="tables-grid">
+      <div *ngIf="allSetups.length > 0" class="tables-grid">
         
         <!-- Bullish Table -->
         <div class="table-wrapper bullish-wrapper">
@@ -185,8 +190,20 @@ import { SupabaseService } from '../../services/supabase.service';
       font-family: Roboto, "Helvetica Neue", sans-serif;
     }
     h2 {
-      margin-bottom: 16px;
+      margin: 0;
       color: #333;
+    }
+    .refresh-indicator {
+      font-size: 0.75rem;
+      color: #777;
+      background: #f0f2f5;
+      padding: 4px 8px;
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
+    .syncing {
+      background: #e3f2fd;
+      color: #1976d2;
     }
     .spinner-container {
       display: flex;
@@ -207,6 +224,7 @@ import { SupabaseService } from '../../services/supabase.service';
       display: flex;
       flex-wrap: wrap;
       gap: 24px;
+      margin-top: 16px;
       align-items: flex-start;
     }
     .table-wrapper {
@@ -278,6 +296,7 @@ export class CustomGroup implements OnInit, OnDestroy {
   bearishDataSource = new MatTableDataSource<any>([]);
 
   private destroy$ = new Subject<void>();
+  private pollInterval: any;
 
   @ViewChild('bullishSort', { static: false }) set bullishSort(sort: MatSort) {
     this.bullishDataSource.sort = sort;
@@ -293,18 +312,25 @@ export class CustomGroup implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.fetchData();
+
+    // Smart Polling: Fetch new setups every 15 seconds, but only if the user is active on the page
+    this.pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        this.fetchData(false);
+      }
+    }, 15000);
   }
 
-  fetchData(): void {
-    this.loading = true;
+  fetchData(showSpinner = true): void {
+    if (showSpinner) {
+      this.loading = true;
+    }
     this.supabaseService.getScreenerSetups()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (data) => {
-          // Filter for Custom List setups only
           const customSetups = data.filter(s => s.group_name === 'Custom List');
           
-          // Deduplicate
           const uniqueCustom = Array.from(
             new Map(customSetups.map(item => [item.symbol, item])).values()
           );
@@ -326,5 +352,8 @@ export class CustomGroup implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+    }
   }
 }
