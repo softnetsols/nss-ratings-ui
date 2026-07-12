@@ -47,13 +47,9 @@ import { SupabaseService } from '../../services/supabase.service';
             <ng-container matColumnDef="symbol">
               <th mat-header-cell *matHeaderCellDef mat-sort-header> Symbol </th>
               <td mat-cell *matCellDef="let element">
-                <div class="symbol-container">
-                  <span class="symbol-text">{{ element.symbol }}</span>
-                  <div class="link-icons">
-                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + element.symbol" target="_blank" title="Open TradingView Chart" class="link-badge tv-badge">TV</a>
-                    <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" title="Open Finviz Analysis" class="link-badge fv-badge">FV</a>
-                  </div>
-                </div>
+                <a [href]="'https://www.tradingview.com/chart/?symbol=' + element.symbol" target="_blank" class="sym-link" title="Open TradingView Chart">
+                  {{ element.symbol }}
+                </a>
               </td>
             </ng-container>
 
@@ -113,6 +109,27 @@ import { SupabaseService } from '../../services/supabase.service';
               </td>
             </ng-container>
 
+            <!-- Actions -->
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef> Actions </th>
+              <td mat-cell *matCellDef="let element">
+                <div class="actions-container">
+                  <a [href]="'https://www.tradingview.com/chart/?symbol=' + element.symbol" target="_blank" title="Open TradingView Chart" class="action-btn">
+                    <svg viewBox="0 0 36 36" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="18" cy="18" r="16" fill="#131722" stroke="#2962ff" stroke-width="1.5"/>
+                      <path d="M12 24V16H15V24H12ZM17 24V10H20V24H17ZM22 24V14H25V24H22Z" fill="#2962ff"/>
+                    </svg>
+                  </a>
+                  <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" title="Open Finviz Analysis" class="action-btn">
+                    <svg viewBox="0 0 36 36" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="18" cy="18" r="16" fill="#131722" stroke="#388e3c" stroke-width="1.5"/>
+                      <path d="M14 22V14H16V22H14ZM14 18H10V16H14V18ZM20 26V10H22V26H20ZM26 20V12H28V20H26ZM26 16H22V14H26V16Z" fill="#388e3c"/>
+                    </svg>
+                  </a>
+                </div>
+              </td>
+            </ng-container>
+
             <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
             <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
           </table>
@@ -131,13 +148,9 @@ import { SupabaseService } from '../../services/supabase.service';
             <ng-container matColumnDef="symbol">
               <th mat-header-cell *matHeaderCellDef mat-sort-header> Symbol </th>
               <td mat-cell *matCellDef="let element">
-                <div class="symbol-container">
-                  <span class="symbol-text">{{ element.symbol }}</span>
-                  <div class="link-icons">
-                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + element.symbol" target="_blank" title="Open TradingView Chart" class="link-badge tv-badge">TV</a>
-                    <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" title="Open Finviz Analysis" class="link-badge fv-badge">FV</a>
-                  </div>
-                </div>
+                <a [href]="'https://www.tradingview.com/chart/?symbol=' + element.symbol" target="_blank" class="sym-link" title="Open TradingView Chart">
+                  {{ element.symbol }}
+                </a>
               </td>
             </ng-container>
 
@@ -194,6 +207,27 @@ import { SupabaseService } from '../../services/supabase.service';
               <th mat-header-cell *matHeaderCellDef mat-sort-header> Group </th>
               <td mat-cell *matCellDef="let element" class="group-cell">
                 {{ element.group_name }}
+              </td>
+            </ng-container>
+
+            <!-- Actions -->
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef> Actions </th>
+              <td mat-cell *matCellDef="let element">
+                <div class="actions-container">
+                  <a [href]="'https://www.tradingview.com/chart/?symbol=' + element.symbol" target="_blank" title="Open TradingView Chart" class="action-btn">
+                    <svg viewBox="0 0 36 36" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="18" cy="18" r="16" fill="#131722" stroke="#2962ff" stroke-width="1.5"/>
+                      <path d="M12 24V16H15V24H12ZM17 24V10H20V24H17ZM22 24V14H25V24H22Z" fill="#2962ff"/>
+                    </svg>
+                  </a>
+                  <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" title="Open Finviz Analysis" class="action-btn">
+                    <svg viewBox="0 0 36 36" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="18" cy="18" r="16" fill="#131722" stroke="#388e3c" stroke-width="1.5"/>
+                      <path d="M14 22V14H16V22H14ZM14 18H10V16H14V18ZM20 26V10H22V26H20ZM26 20V12H28V20H26ZM26 16H22V14H26V16Z" fill="#388e3c"/>
+                    </svg>
+                  </a>
+                </div>
               </td>
             </ng-container>
 
@@ -288,40 +322,26 @@ import { SupabaseService } from '../../services/supabase.service';
     tr:hover td {
       background-color: #1c2030 !important;
     }
-    .symbol-container {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .symbol-text {
-      font-weight: bold;
+    .sym-link {
       color: #29b6f6;
-    }
-    .link-icons {
-      display: flex;
-      gap: 4px;
-    }
-    .link-badge {
-      font-size: 0.6rem;
-      font-weight: bold;
-      padding: 1px 4px;
-      border-radius: 3px;
       text-decoration: none;
-      transition: background 0.2s ease;
+      font-weight: bold;
     }
-    .tv-badge {
-      background-color: #2962ff;
-      color: white !important;
+    .sym-link:hover {
+      text-decoration: underline;
     }
-    .tv-badge:hover {
-      background-color: #1565c0;
+    .actions-container {
+      display: flex;
+      gap: 8px;
+      align-items: center;
     }
-    .fv-badge {
-      background-color: #388e3c;
-      color: white !important;
+    .action-btn {
+      display: inline-flex;
+      cursor: pointer;
+      transition: transform 0.15s ease;
     }
-    .fv-badge:hover {
-      background-color: #2e7d32;
+    .action-btn:hover {
+      transform: scale(1.15);
     }
     .empty-list-msg {
       padding: 16px;
@@ -343,7 +363,7 @@ import { SupabaseService } from '../../services/supabase.service';
   `]
 })
 export class Screener implements OnInit, OnDestroy {
-  displayedColumns = ['symbol', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'age', 'group_name'];
+  displayedColumns = ['symbol', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'age', 'group_name', 'actions'];
   allSetups: any[] = [];
   loading = true;
   
