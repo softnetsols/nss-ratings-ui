@@ -363,7 +363,7 @@ import { SupabaseService } from '../../services/supabase.service';
   `]
 })
 export class Screener implements OnInit, OnDestroy {
-  displayedColumns = ['symbol', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'age', 'group_name', 'actions'];
+  displayedColumns = ['symbol', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'age', 'actions'];
   allSetups: any[] = [];
   loading = true;
   
