@@ -25,5 +25,5 @@ export const environment = {
     },
 
     SUPABASE_URL: "https://ktgowjwhvaamoqfirfsp.supabase.co",
-    SUPABASE_SERVICE_ROLE_KEY: "sb_secret_DgRABmbikxtZJiWh-VPrsQ_kbrxev5T"
+    SUPABASE_ANON_KEY: "sb_publishable_BVXYBD9rzldGsdTULABPtA_XaYWSNx0"
 }
