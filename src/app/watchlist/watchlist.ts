@@ -4,7 +4,8 @@ import { MatTableModule, MatTableDataSource } from '@angular/material/table';
 import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Firestore, doc, docData } from '@angular/fire/firestore';
-import { firstValueFrom, take } from 'rxjs';
+import { firstValueFrom, Subject, take, takeUntil } from 'rxjs';
+import { SupabaseService } from '../../services/supabase.service';
 
 @Component({
   selector: 'app-watchlist',
@@ -23,7 +24,14 @@ export class Watchlist implements AfterViewInit {
   displayedColumns: string[] = ['symbol', 'price', 'volume', 'marketCap', 'percentChange'];
   dataSource = new MatTableDataSource<any>([]);
   loading = true;
-  constructor() {
+  // displayedColumns = ['symbol', 'name', 'price', 'volume', 'percentChange'];
+  // dataSource: any[] = [];
+
+  private destroy$ = new Subject<void>();
+  
+  constructor(
+    private supabaseService: SupabaseService
+  ) {
     // No need to initialize dataSource here, it will be set in ngOnInit
     // All async logic moved to ngOnInit
   }
@@ -60,33 +68,53 @@ export class Watchlist implements AfterViewInit {
   // }
 
   ngAfterViewInit() {
-    this.loading = true; // start spinner
+    // this.loading = true; // start spinner
 
-    const docRef = doc(this.firestore, 'dailyWatchlist/today');
+    // const docRef = doc(this.firestore, 'dailyWatchlist/today');
 
-    docData(docRef)
-      .pipe(take(1))
+    // docData(docRef)
+    //   .pipe(take(1))
+    //   .subscribe({
+    //     next: (data: any) => {
+    //       if (data?.stocks?.length) {
+    //         this.dataSource.data = [...data.stocks];
+    //         // this.dataSource.sort = this.sort;
+    //         this.loading = false; // stop spinner
+    //         console.log('72 Watchlist Data:', data.stocks);
+
+    //       } else {
+    //         console.log('No stocks found in watchlist.');
+    //         this.dataSource.data = [];
+    //       }
+    //     },
+    //     error: (error) => {
+    //       console.error('Error fetching watchlist:', error);
+    //       this.dataSource.data = [];
+    //     },
+    //     // complete: () => {
+    //     //   this.loading = false; // stop spinner reliably
+    //     //   console.log('86 Watchlist loading complete', this.dataSource.data);
+    //     // }
+    //   });
+  }
+
+   ngOnInit(): void {
+    this.supabaseService.getMostActive()
+      .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (data: any) => {
-          if (data?.stocks?.length) {
-            this.dataSource.data = [...data.stocks];
-            // this.dataSource.sort = this.sort;
-            this.loading = false; // stop spinner
-            console.log('72 Watchlist Data:', data.stocks);
-
-          } else {
-            console.log('No stocks found in watchlist.');
-            this.dataSource.data = [];
-          }
+        next: (data) => {
+          this.dataSource.data = data;
+          this.loading = false;
         },
-        error: (error) => {
-          console.error('Error fetching watchlist:', error);
-          this.dataSource.data = [];
-        },
-        // complete: () => {
-        //   this.loading = false; // stop spinner reliably
-        //   console.log('86 Watchlist loading complete', this.dataSource.data);
-        // }
+        error: (err) => {
+          console.error('Error loading most active stocks:', err);
+          this.loading = false;
+        }
       });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 }

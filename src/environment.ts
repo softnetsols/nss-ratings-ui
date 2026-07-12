@@ -22,6 +22,8 @@ export const environment = {
         storageBucket: "nss-ratings.firebasestorage.app",
         messagingSenderId: "868816434993",
         appId: "1:868816434993:web:b466a471fbbe35cd1da210"
-    }
+    },
 
+    SUPABASE_URL: "https://ktgowjwhvaamoqfirfsp.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "sb_secret_DgRABmbikxtZJiWh-VPrsQ_kbrxev5T"
 }
