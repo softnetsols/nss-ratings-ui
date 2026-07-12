@@ -40,7 +40,7 @@ import { SupabaseService } from '../../services/supabase.service';
         <!-- Bullish Table -->
         <div class="table-wrapper bullish-wrapper">
           <div class="table-header bullish-header">
-            🟢 BULLISH CUSTOM SETUPS
+            🟢 BULLISH CUSTOM SETUPS ({{ bullishDataSource.data.length }})
           </div>
           <table mat-table [dataSource]="bullishDataSource" matSort #bullishSort="matSort" matSortActive="score" matSortDirection="desc" class="mat-elevation-z2">
             <!-- Symbol -->
@@ -116,7 +116,7 @@ import { SupabaseService } from '../../services/supabase.service';
         <!-- Bearish Table -->
         <div class="table-wrapper bearish-wrapper">
           <div class="table-header bearish-header">
-            🔴 BEARISH CUSTOM SETUPS
+            🔴 BEARISH CUSTOM SETUPS ({{ bearishDataSource.data.length }})
           </div>
           <table mat-table [dataSource]="bearishDataSource" matSort #bearishSort="matSort" matSortActive="score" matSortDirection="desc" class="mat-elevation-z2">
             <!-- Symbol -->
