@@ -4,7 +4,7 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "ng build && cp -r netlify dist/nss-ratings/browser/",
+    "build": "npx ng build && cp -r netlify dist/nss-ratings/browser/",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },
