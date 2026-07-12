@@ -403,7 +403,7 @@ export class Screener implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (data) => {
-          const mainSetups = data.filter(s => s.group_name !== 'Custom List');
+          const mainSetups = data.filter(s => !s.group_name.startsWith('Custom'));
           
           const uniqueSetups = Array.from(
             new Map(mainSetups.map(item => [item.symbol + '_' + item.group_name, item])).values()

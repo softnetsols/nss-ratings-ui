@@ -383,7 +383,7 @@ export class CustomGroup implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (data) => {
-          const customSetups = data.filter(s => s.group_name === 'Custom List');
+          const customSetups = data.filter(s => s.group_name.startsWith('Custom'));
           
           const uniqueCustom = Array.from(
             new Map(customSetups.map(item => [item.symbol, item])).values()
