@@ -7,7 +7,7 @@ import { Subject, takeUntil } from 'rxjs';
 import { SupabaseService } from '../../services/supabase.service';
 
 @Component({
-  selector: 'app-screener',
+  selector: 'app-alphatrend',
   standalone: true,
   imports: [
     CommonModule,
@@ -19,7 +19,7 @@ import { SupabaseService } from '../../services/supabase.service';
   template: `
     <div class="screener-container">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h2>Golden/Death Cross Screener</h2>
+        <h2>AlphaTrend Pullback Reversal</h2>
         <span class="refresh-indicator" [class.syncing]="loading">
           {{ loading ? 'Updating...' : 'Auto-refreshing in 15s' }}
         </span>
@@ -31,7 +31,7 @@ import { SupabaseService } from '../../services/supabase.service';
       </div>
 
       <div *ngIf="!loading && allSetups.length === 0" class="no-data">
-        No active setups found. Make sure your TradingView alerts are active and pushing data.
+        No active setups found. Make sure your TradingView AlphaTrend alerts are active and pushing data.
       </div>
 
       <!-- Side-by-Side Tables Layout -->
@@ -244,91 +244,101 @@ import { SupabaseService } from '../../services/supabase.service';
   `,
   styles: [`
     .screener-container {
-      padding: 16px;
-      font-family: Roboto, "Helvetica Neue", sans-serif;
+      padding: 16px 24px;
+      color: #fff;
     }
     h2 {
-      margin: 0;
-      color: #333;
+      margin: 0 0 16px 0;
+      font-size: 1.5rem;
+      font-weight: 500;
+      color: #fff;
     }
     .refresh-indicator {
-      font-size: 0.75rem;
-      color: #777;
-      background: #f0f2f5;
-      padding: 4px 8px;
-      border-radius: 12px;
-      transition: all 0.3s ease;
+      font-size: 0.8rem;
+      color: #888;
+      background: #1e222d;
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: 1px solid #2a2e39;
     }
-    .syncing {
-      background: #e3f2fd;
-      color: #1976d2;
+    .refresh-indicator.syncing {
+      color: #00ff88;
+      border-color: #00ff88;
     }
     .spinner-container {
       display: flex;
       flex-direction: column;
       align-items: center;
-      margin-top: 40px;
-      gap: 12px;
-      color: #666;
+      padding: 40px 0;
+      color: #888;
+    }
+    .spinner-container p {
+      margin-top: 12px;
     }
     .no-data {
-      padding: 24px;
+      padding: 40px;
       text-align: center;
-      background: #f5f5f5;
-      border-radius: 4px;
-      color: #666;
+      background: #1c2030;
+      border-radius: 8px;
+      color: #888;
+      border: 1px solid #2a2e39;
     }
     .tables-grid {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 24px;
-      margin-top: 16px;
-      align-items: flex-start;
     }
     .table-wrapper {
-      flex: 1;
-      min-width: 360px;
-      background: #1e1e1e;
-      border-radius: 6px;
+      background: #1c2030;
+      border-radius: 8px;
+      border: 1px solid #2a2e39;
       overflow: hidden;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
     }
     .table-header {
-      padding: 10px 16px;
+      padding: 12px 16px;
       font-weight: bold;
-      color: white;
       font-size: 0.95rem;
+      border-bottom: 1px solid #2a2e39;
     }
     .bullish-header {
-      background-color: #0d2c1d;
+      background: rgba(13, 44, 29, 0.5);
+      color: #00ff88;
     }
     .bearish-header {
-      background-color: #3b1212;
+      background: rgba(59, 18, 18, 0.5);
+      color: #ff4a4a;
     }
     table {
       width: 100%;
-      background: #131722 !important;
+      background: transparent !important;
+      border-collapse: collapse;
     }
     th {
       color: #888 !important;
-      font-weight: bold;
-      font-size: 0.8rem;
+      font-weight: 500 !important;
+      font-size: 0.8rem !important;
+      background: #171b26 !important;
+      border-bottom: 1px solid #2a2e39 !important;
     }
     td {
-      color: #e0e3eb;
-      font-size: 0.85rem;
-      border-bottom-color: #2a2e39 !important;
+      color: #fff !important;
+      border-bottom: 1px solid #1e222d !important;
+      font-size: 0.85rem !important;
     }
     tr:hover td {
-      background-color: #1c2030 !important;
+      background: #2a2e39 !important;
     }
     .sym-link {
-      color: #29b6f6;
+      color: #2962ff;
       text-decoration: none;
-      font-weight: bold;
+      font-weight: 500;
     }
     .sym-link:hover {
       text-decoration: underline;
+    }
+    .group-cell {
+      color: #aaa !important;
+      font-size: 0.8rem !important;
     }
     .actions-container {
       display: flex;
@@ -337,36 +347,39 @@ import { SupabaseService } from '../../services/supabase.service';
     }
     .action-btn {
       display: inline-flex;
-      cursor: pointer;
-      transition: transform 0.15s ease;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s ease;
     }
     .action-btn:hover {
-      transform: scale(1.15);
+      transform: scale(1.1);
     }
     .empty-list-msg {
-      padding: 16px;
+      padding: 24px;
       text-align: center;
       color: #888;
-      background-color: #131722;
       font-size: 0.85rem;
     }
-    .group-cell {
-      color: #9e9e9e !important;
-      font-size: 0.75rem !important;
-    }
     ::ng-deep .mat-sort-header-container {
-      justify-content: flex-start;
+      display: flex;
+      align-items: center;
     }
     ::ng-deep .mat-sort-header-arrow {
       color: #888 !important;
     }
-    @media (max-width: 768px) {
+
+    /* Mobile Responsive Tables Swipe-Scroll */
+    @media (max-width: 1024px) {
       .tables-grid {
-        flex-direction: column;
+        grid-template-columns: 1fr;
         gap: 16px;
       }
+    }
+    @media (max-width: 768px) {
+      .screener-container {
+        padding: 12px 10px;
+      }
       .table-wrapper {
-        min-width: 100% !important;
         overflow-x: auto !important;
         -webkit-overflow-scrolling: touch;
       }
@@ -380,8 +393,8 @@ import { SupabaseService } from '../../services/supabase.service';
     }
   `]
 })
-export class Screener implements OnInit, OnDestroy {
-  displayedColumns = ['symbol', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'age', 'actions'];
+export class AlphaTrend implements OnInit, OnDestroy {
+  displayedColumns = ['symbol', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'age', 'group_name', 'actions'];
   allSetups: any[] = [];
   loading = true;
   
@@ -438,10 +451,18 @@ export class Screener implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (data) => {
-          const mainSetups = data.filter(s => !s.group_name.startsWith('Custom') && !s.group_name.startsWith('AlphaTrend'));
+          // Filter specifically for AlphaTrend setups
+          const alphaSetups = data
+            .filter(s => s.group_name.startsWith('AlphaTrend -'))
+            .map(s => ({
+              ...s,
+              // Strip "AlphaTrend - " prefix for cleaner display on the page
+              group_name: s.group_name.replace('AlphaTrend - ', '')
+            }));
           
+          // Filter duplicates per symbol-group combination
           const uniqueSetups = Array.from(
-            new Map(mainSetups.map(item => [item.symbol + '_' + item.group_name, item])).values()
+            new Map(alphaSetups.map(item => [item.symbol + '_' + item.group_name, item])).values()
           );
 
           this.allSetups = uniqueSetups;
@@ -451,7 +472,7 @@ export class Screener implements OnInit, OnDestroy {
           this.cdr.detectChanges();
         },
         error: (err) => {
-          console.error('Error loading screener setups:', err);
+          console.error('Error loading AlphaTrend setups:', err);
           this.loading = false;
           this.cdr.detectChanges();
         }
