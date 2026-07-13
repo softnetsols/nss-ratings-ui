@@ -360,6 +360,24 @@ import { SupabaseService } from '../../services/supabase.service';
     ::ng-deep .mat-sort-header-arrow {
       color: #888 !important;
     }
+    @media (max-width: 768px) {
+      .tables-grid {
+        flex-direction: column;
+        gap: 16px;
+      }
+      .table-wrapper {
+        min-width: 100% !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+      }
+      table {
+        min-width: 650px !important;
+      }
+      th, td {
+        padding: 8px 4px !important;
+        font-size: 0.78rem !important;
+      }
+    }
   `]
 })
 export class Screener implements OnInit, OnDestroy {
