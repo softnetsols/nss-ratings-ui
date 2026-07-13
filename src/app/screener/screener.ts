@@ -392,10 +392,27 @@ export class Screener implements OnInit, OnDestroy {
   private pollInterval: any;
 
   @ViewChild('bullishSort', { static: false }) set bullishSort(sort: MatSort) {
+    this.bullishDataSource.sortingDataAccessor = (item, property) => this.customSortAccessor(item, property);
     this.bullishDataSource.sort = sort;
   }
   @ViewChild('bearishSort', { static: false }) set bearishSort(sort: MatSort) {
+    this.bearishDataSource.sortingDataAccessor = (item, property) => this.customSortAccessor(item, property);
     this.bearishDataSource.sort = sort;
+  }
+
+  customSortAccessor(item: any, property: string): string | number {
+    if (property === 'age') {
+      if (!item.age || item.age === '-') return 999999;
+      const match = item.age.match(/^(\d+(?:\.\d+)?)(m|h|d)?$/);
+      if (!match) return 999999;
+      const value = parseFloat(match[1]);
+      const unit = match[2];
+      if (unit === 'm') return value;
+      if (unit === 'h') return value * 60;
+      if (unit === 'd') return value * 1440;
+      return value;
+    }
+    return item[property];
   }
 
   constructor(
