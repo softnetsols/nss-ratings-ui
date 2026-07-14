@@ -20,9 +20,14 @@ import { SupabaseService } from '../../services/supabase.service';
     <div class="screener-container">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <h2>Custom List Screener</h2>
-        <span class="refresh-indicator" [class.syncing]="loading">
-          {{ loading ? 'Updating...' : 'Auto-refreshing in 15s' }}
-        </span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="manual-refresh-btn" (click)="fetchData(true)" [disabled]="loading">
+            🔄 {{ loading ? 'Refreshing...' : 'Refresh' }}
+          </button>
+          <span class="refresh-indicator" [class.syncing]="loading">
+            {{ loading ? 'Updating...' : 'Ready' }}
+          </span>
+        </div>
       </div>
 
       <div *ngIf="loading && allSetups.length === 0" class="spinner-container">
@@ -235,6 +240,28 @@ import { SupabaseService } from '../../services/supabase.service';
       margin: 0;
       color: #333;
     }
+    .manual-refresh-btn {
+      background: #1976d2;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s;
+    }
+    .manual-refresh-btn:hover {
+      background: #1565c0;
+    }
+    .manual-refresh-btn:disabled {
+      background: #ccc;
+      color: #666;
+      cursor: not-allowed;
+    }
     .refresh-indicator {
       font-size: 0.75rem;
       color: #777;
@@ -402,12 +429,6 @@ export class CustomGroup implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.fetchData();
-
-    this.pollInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        this.fetchData(false);
-      }
-    }, 15000);
   }
 
   fetchData(showSpinner = true): void {

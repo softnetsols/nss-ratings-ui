@@ -42,7 +42,7 @@ import { SupabaseService } from '../../services/supabase.service';
           <div class="table-header bullish-header">
             🟢 ALL BULLISH SETUPS ({{ bullishDataSource.data.length }})
           </div>
-          <table mat-table [dataSource]="bullishDataSource" matSort #bullishSort="matSort" matSortActive="score" matSortDirection="desc" class="mat-elevation-z2">
+          <table mat-table [dataSource]="bullishDataSource" matSort #bullishSort="matSort" matSortActive="updated_at" matSortDirection="desc" class="mat-elevation-z2">
             <!-- Symbol -->
             <ng-container matColumnDef="symbol">
               <th mat-header-cell *matHeaderCellDef mat-sort-header> Symbol </th>
@@ -93,11 +93,11 @@ import { SupabaseService } from '../../services/supabase.service';
               </td>
             </ng-container>
 
-            <!-- Age -->
-            <ng-container matColumnDef="age">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Age </th>
-              <td mat-cell *matCellDef="let element" style="color: #888;">
-                {{ element.age || '-' }}
+            <!-- Trigger Time (updated_at) -->
+            <ng-container matColumnDef="updated_at">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Trigger Time </th>
+              <td mat-cell *matCellDef="let element" style="color: #bbb;">
+                {{ element.updated_at ? (element.updated_at | date: 'MM/dd HH:mm') : '-' }}
               </td>
             </ng-container>
 
@@ -143,7 +143,7 @@ import { SupabaseService } from '../../services/supabase.service';
           <div class="table-header bearish-header">
             🔴 ALL BEARISH SETUPS ({{ bearishDataSource.data.length }})
           </div>
-          <table mat-table [dataSource]="bearishDataSource" matSort #bearishSort="matSort" matSortActive="score" matSortDirection="desc" class="mat-elevation-z2">
+          <table mat-table [dataSource]="bearishDataSource" matSort #bearishSort="matSort" matSortActive="updated_at" matSortDirection="desc" class="mat-elevation-z2">
             <!-- Symbol -->
             <ng-container matColumnDef="symbol">
               <th mat-header-cell *matHeaderCellDef mat-sort-header> Symbol </th>
@@ -194,11 +194,11 @@ import { SupabaseService } from '../../services/supabase.service';
               </td>
             </ng-container>
 
-            <!-- Age -->
-            <ng-container matColumnDef="age">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Age </th>
-              <td mat-cell *matCellDef="let element" style="color: #888;">
-                {{ element.age || '-' }}
+            <!-- Trigger Time (updated_at) -->
+            <ng-container matColumnDef="updated_at">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Trigger Time </th>
+              <td mat-cell *matCellDef="let element" style="color: #bbb;">
+                {{ element.updated_at ? (element.updated_at | date: 'MM/dd HH:mm') : '-' }}
               </td>
             </ng-container>
 
@@ -394,7 +394,7 @@ import { SupabaseService } from '../../services/supabase.service';
   `]
 })
 export class AlphaTrend implements OnInit, OnDestroy {
-  displayedColumns = ['symbol', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'age', 'group_name', 'actions'];
+  displayedColumns = ['symbol', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'updated_at', 'group_name', 'actions'];
   allSetups: any[] = [];
   loading = true;
   
@@ -414,16 +414,8 @@ export class AlphaTrend implements OnInit, OnDestroy {
   }
 
   customSortAccessor(item: any, property: string): string | number {
-    if (property === 'age') {
-      if (!item.age || item.age === '-') return 999999;
-      const match = item.age.match(/^(\d+(?:\.\d+)?)(m|h|d)?$/);
-      if (!match) return 999999;
-      const value = parseFloat(match[1]);
-      const unit = match[2];
-      if (unit === 'm') return value;
-      if (unit === 'h') return value * 60;
-      if (unit === 'd') return value * 1440;
-      return value;
+    if (property === 'updated_at') {
+      return item.updated_at ? new Date(item.updated_at).getTime() : 0;
     }
     return item[property];
   }

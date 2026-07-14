@@ -26,8 +26,8 @@ import { AlphaTrend } from "./alphatrend/alphatrend";
     template: `
     <mat-toolbar color="primary">NSS Group - Stock Recommendations</mat-toolbar>
     <div class="nav-container">
-      <button mat-button [class.active]="view === 'screener'" (click)="view = 'screener'">Golden/Death Cross Screener</button>
       <button mat-button [class.active]="view === 'alphatrend'" (click)="view = 'alphatrend'">AlphaTrend Pullback</button>
+      <button mat-button [class.active]="view === 'screener'" (click)="view = 'screener'">Golden/Death Cross Screener</button>
       <button mat-button [class.active]="view === 'custom-group'" (click)="view = 'custom-group'">Custom Group</button>
       <button mat-button [class.active]="view === 'watchlist'" (click)="view = 'watchlist'">Watch List</button>
       <button mat-button [class.active]="view === 'recommendations'" (click)="view = 'recommendations'">View Recommendations</button>
@@ -71,5 +71,5 @@ import { AlphaTrend } from "./alphatrend/alphatrend";
 })
 
 export class App {
-    view = 'screener';
+    view = 'alphatrend';
 }
