@@ -69,21 +69,25 @@ exports.handler = async (event, context) => {
       });
     }
 
-    // 1. Delete previous setups for this watchlist group
-    const { error: deleteError } = await supabase
-      .from('screener_setups')
-      .delete()
-      .eq('group_name', group_name);
+    // 1. Delete previous setups ONLY for the specific symbols that have new signals in this payload
+    const symbolsInPayload = [...bullish.map(item => item.sym), ...bearish.map(item => item.sym)];
+    if (symbolsInPayload.length > 0) {
+      const { error: deleteError } = await supabase
+        .from('screener_setups')
+        .delete()
+        .eq('group_name', group_name)
+        .in('symbol', symbolsInPayload);
 
-    if (deleteError) {
-      console.error('Error clearing old setups:', deleteError);
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: deleteError.message })
-      };
+      if (deleteError) {
+        console.error('Error clearing old setups for payload symbols:', deleteError);
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: deleteError.message })
+        };
+      }
     }
 
-    // 2. Insert new setups (if any are active)
+    // 2. Insert new setups
     if (rows.length > 0) {
       const { error: insertError } = await supabase
         .from('screener_setups')
@@ -96,6 +100,18 @@ exports.handler = async (event, context) => {
           body: JSON.stringify({ error: insertError.message })
         };
       }
+    }
+
+    // 3. Clean up database signals that are older than 1 week (7 days)
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const { error: cleanupError } = await supabase
+      .from('screener_setups')
+      .delete()
+      .lt('updated_at', oneWeekAgo.toISOString());
+
+    if (cleanupError) {
+      console.warn('Warning: Failed to clean up 1-week old setups:', cleanupError.message);
     }
 
     return {
