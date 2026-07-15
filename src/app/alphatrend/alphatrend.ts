@@ -1,7 +1,6 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
-import { MatTableModule, MatTableDataSource } from '@angular/material/table';
-import { MatSort, MatSortModule } from '@angular/material/sort';
+import { FormsModule } from '@angular/forms';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Subject, takeUntil } from 'rxjs';
 import { SupabaseService } from '../../services/supabase.service';
@@ -11,247 +10,228 @@ import { SupabaseService } from '../../services/supabase.service';
   standalone: true,
   imports: [
     CommonModule,
-    MatTableModule,
-    MatSortModule,
     MatProgressSpinnerModule,
-    DecimalPipe
+    DecimalPipe,
+    FormsModule
   ],
   template: `
     <div class="screener-container">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div class="screener-header">
         <h2>AlphaTrend Pullback Reversal</h2>
         <span class="refresh-indicator" [class.syncing]="loading">
           {{ loading ? 'Updating...' : 'Auto-refreshing in 15s' }}
         </span>
       </div>
 
+      <!-- Advanced Filter Panel -->
+      <div class="filter-panel">
+        <div class="search-box">
+          <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="applyFilters()" placeholder="Search symbols..." class="search-input" />
+        </div>
+        <div class="filters-row">
+          <div class="filter-group">
+            <span class="group-label">Quality:</span>
+            <label class="checkbox-label">
+              <input type="checkbox" [(ngModel)]="filterQualityA" (change)="applyFilters()" /> A Grade
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" [(ngModel)]="filterQualityB" (change)="applyFilters()" /> B Grade
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" [(ngModel)]="filterQualityC" (change)="applyFilters()" /> C Grade
+            </label>
+          </div>
+          <div class="filter-group toggles">
+            <label class="checkbox-label toggle-label">
+              <input type="checkbox" [(ngModel)]="showDuplicates" (change)="applyFilters()" /> Duplicates
+            </label>
+            <label class="checkbox-label toggle-label">
+              <input type="checkbox" [(ngModel)]="showRejected" (change)="applyFilters()" /> Rejects
+            </label>
+            <label class="checkbox-label toggle-label">
+              <input type="checkbox" [(ngModel)]="showStale" (change)="applyFilters()" /> Stale/Expired
+            </label>
+          </div>
+        </div>
+      </div>
+
       <div *ngIf="loading && allSetups.length === 0" class="spinner-container">
         <mat-spinner diameter="40"></mat-spinner>
-        <p>Loading setups from database...</p>
+        <p>Loading active setups...</p>
       </div>
 
       <div *ngIf="!loading && allSetups.length === 0" class="no-data">
-        No active setups found. Make sure your TradingView AlphaTrend alerts are active and pushing data.
+        No active setups found. Make sure your TradingView AlphaTrend alerts are active.
       </div>
 
-      <!-- Side-by-Side Tables Layout -->
+      <!-- Side-by-Side Symbol Card Columns -->
       <div *ngIf="allSetups.length > 0" class="tables-grid">
         
-        <!-- Bullish Table -->
-        <div class="table-wrapper bullish-wrapper">
-          <div class="table-header bullish-header">
-            🟢 ALL BULLISH SETUPS ({{ bullishDataSource.data.length }})
+        <!-- Bullish Column -->
+        <div class="column-wrapper bullish-col">
+          <div class="column-header bullish-header">
+            🟢 BULLISH SETUPS ({{ filteredBullish.length }} of {{ totalBullish }})
           </div>
-          <table mat-table [dataSource]="bullishDataSource" matSort #bullishSort="matSort" matSortActive="updated_at" matSortDirection="desc" class="mat-elevation-z2">
-            <!-- Symbol -->
-            <ng-container matColumnDef="symbol">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Symbol </th>
-              <td mat-cell *matCellDef="let element">
-                <a [href]="'https://www.tradingview.com/chart/?symbol=' + element.symbol" target="_blank" class="sym-link" title="Open TradingView Chart">
-                  {{ element.symbol }}
-                </a>
-              </td>
-            </ng-container>
-
-            <!-- Trigger Price -->
-            <ng-container matColumnDef="trigger_price">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Trigger Price </th>
-              <td mat-cell *matCellDef="let element">
-                \${{ (element.trigger_price || element.price) | number: '1.2-2' }}
-              </td>
-            </ng-container>
-
-            <!-- Price -->
-            <ng-container matColumnDef="price">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Current Price </th>
-              <td mat-cell *matCellDef="let element">
-                \${{ element.price | number: '1.2-2' }}
-              </td>
-            </ng-container>
-
-            <!-- Chg % -->
-            <ng-container matColumnDef="change_pct">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Chg % </th>
-              <td mat-cell *matCellDef="let element" [ngStyle]="{'color': element.change_pct >= 0 ? '#00ff88' : '#ff4a4a'}">
-                {{ element.change_pct | number: '1.2-2' }}%
-              </td>
-            </ng-container>
-
-            <!-- RVOL -->
-            <ng-container matColumnDef="rvol">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> RVOL </th>
-              <td mat-cell *matCellDef="let element">
-                {{ element.rvol | number: '1.2-2' }}x
-              </td>
-            </ng-container>
-
-            <!-- VWAP Dist -->
-            <ng-container matColumnDef="vwap_dist">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> VWAP % </th>
-              <td mat-cell *matCellDef="let element" [ngStyle]="{'color': element.vwap_dist >= 0 ? '#00ff88' : '#ff4a4a'}">
-                {{ element.vwap_dist | number: '1.2-2' }}%
-              </td>
-            </ng-container>
-
-            <!-- Score -->
-            <ng-container matColumnDef="score">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Score </th>
-              <td mat-cell *matCellDef="let element" style="font-weight: bold; color: #00ff88;">
-                {{ element.score }}/5
-              </td>
-            </ng-container>
-
-            <!-- Trigger Time (updated_at) -->
-            <ng-container matColumnDef="updated_at">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Trigger Time </th>
-              <td mat-cell *matCellDef="let element" style="color: #bbb;">
-                {{ element.updated_at ? (element.updated_at | date: 'MM/dd HH:mm') : '-' }}
-              </td>
-            </ng-container>
-
-            <!-- Group Name -->
-            <ng-container matColumnDef="group_name">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Group </th>
-              <td mat-cell *matCellDef="let element" class="group-cell">
-                {{ element.group_name }}
-              </td>
-            </ng-container>
-
-            <!-- Actions -->
-            <ng-container matColumnDef="actions">
-              <th mat-header-cell *matHeaderCellDef> Actions </th>
-              <td mat-cell *matCellDef="let element">
-                <div class="actions-container">
-                  <a [href]="'https://www.tradingview.com/chart/?symbol=' + element.symbol" target="_blank" title="Open TradingView Chart" class="action-btn">
-                    <svg viewBox="0 0 36 36" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <circle cx="18" cy="18" r="16" fill="#131722" stroke="#2962ff" stroke-width="1.5"/>
-                      <path d="M12 24V16H15V24H12ZM17 24V10H20V24H17ZM22 24V14H25V24H22Z" fill="#2962ff"/>
-                    </svg>
+          <div class="cards-list">
+            <div *ngFor="let card of filteredBullish" class="symbol-card bullish-card" [class.stale]="card.status === 'stale' || card.status === 'expired'">
+              
+              <!-- Card Top Header -->
+              <div class="card-top">
+                <div class="sym-group">
+                  <a [href]="'https://www.tradingview.com/chart/?symbol=' + card.symbol" target="_blank" class="sym-link">
+                    {{ card.symbol }}
                   </a>
-                  <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" title="Open Finviz Analysis" class="action-btn">
-                    <svg viewBox="0 0 36 36" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <circle cx="18" cy="18" r="16" fill="#131722" stroke="#388e3c" stroke-width="1.5"/>
-                      <path d="M14 22V14H16V22H14ZM14 18H10V16H14V18ZM20 26V10H22V26H20ZM26 20V12H28V20H26ZM26 16H22V14H26V16Z" fill="#388e3c"/>
-                    </svg>
-                  </a>
+                  <span class="mode-badge" [class.ew]="card.signal_mode === 'early_warning'">
+                    {{ card.signal_mode === 'early_warning' ? 'EW' : 'CONFIRMED' }}
+                  </span>
                 </div>
-              </td>
-            </ng-container>
+                <div class="score-badge" [class]="'quality-' + card.signal_quality.toLowerCase()">
+                  Score: {{ card.signal_score }} ({{ card.signal_quality }})
+                </div>
+              </div>
 
-            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-            <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
-          </table>
-          <div *ngIf="bullishDataSource.data.length === 0" class="empty-list-msg">
-            No bullish setups active.
+              <!-- Price Move Grid -->
+              <div class="price-grid">
+                <div class="price-item">
+                  <span class="price-lbl">Trigger Price</span>
+                  <span class="price-val">\${{ card.trigger_price | number: '1.2-2' }}</span>
+                </div>
+                <div class="price-item">
+                  <span class="price-lbl">Current Price</span>
+                  <span class="price-val">\${{ card.current_price | number: '1.2-2' }}</span>
+                </div>
+                <div class="price-item performance">
+                  <span class="price-lbl">Move %</span>
+                  <span class="price-val pct-move" [class.positive]="getMovePct(card) >= 0" [class.negative]="getMovePct(card) < 0">
+                    {{ getMovePct(card) | number: '1.2-2' }}%
+                  </span>
+                </div>
+              </div>
+
+              <!-- Age & Lifecycle Status -->
+              <div class="card-details">
+                <div class="detail-row">
+                  <span class="detail-lbl">Age:</span>
+                  <span class="detail-val">{{ getSignalAge(card) }}m ago</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-lbl">Status:</span>
+                  <span class="detail-val status-tag" [class]="card.status">
+                    {{ card.status | uppercase }}
+                  </span>
+                </div>
+                <div class="detail-row" *ngIf="card.confirmation_count > 1">
+                  <span class="detail-lbl">Confirmations:</span>
+                  <span class="detail-val conf-tag">
+                    {{ getConfirmationsList(card) }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Badges reasons -->
+              <div class="reasons-list" *ngIf="card.score_reasons?.length > 0">
+                <span *ngFor="let reason of card.score_reasons" class="reason-badge" [class.penalty]="reason.startsWith('-')">
+                  {{ reason }}
+                </span>
+              </div>
+
+              <!-- Conflict Indicator -->
+              <div class="conflict-banner" *ngIf="card.status === 'conflict'">
+                ⚠️ CONFLICTING DIRECTION DETECTED
+              </div>
+
+              <!-- Card Bottom Actions -->
+              <div class="card-actions">
+                <a [href]="'https://www.tradingview.com/chart/?symbol=' + card.symbol" target="_blank" class="action-btn tv-btn">TradingView</a>
+                <a [href]="'https://finviz.com/quote.ashx?t=' + card.symbol" target="_blank" class="action-btn fz-btn">Finviz</a>
+              </div>
+
+            </div>
+            <div *ngIf="filteredBullish.length === 0" class="empty-list">No bullish setups match active filters.</div>
           </div>
         </div>
 
-        <!-- Bearish Table -->
-        <div class="table-wrapper bearish-wrapper">
-          <div class="table-header bearish-header">
-            🔴 ALL BEARISH SETUPS ({{ bearishDataSource.data.length }})
+        <!-- Bearish Column -->
+        <div class="column-wrapper bearish-col">
+          <div class="column-header bearish-header">
+            🔴 BEARISH SETUPS ({{ filteredBearish.length }} of {{ totalBearish }})
           </div>
-          <table mat-table [dataSource]="bearishDataSource" matSort #bearishSort="matSort" matSortActive="updated_at" matSortDirection="desc" class="mat-elevation-z2">
-            <!-- Symbol -->
-            <ng-container matColumnDef="symbol">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Symbol </th>
-              <td mat-cell *matCellDef="let element">
-                <a [href]="'https://www.tradingview.com/chart/?symbol=' + element.symbol" target="_blank" class="sym-link" title="Open TradingView Chart">
-                  {{ element.symbol }}
-                </a>
-              </td>
-            </ng-container>
-
-            <!-- Trigger Price -->
-            <ng-container matColumnDef="trigger_price">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Trigger Price </th>
-              <td mat-cell *matCellDef="let element">
-                \${{ (element.trigger_price || element.price) | number: '1.2-2' }}
-              </td>
-            </ng-container>
-
-            <!-- Price -->
-            <ng-container matColumnDef="price">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Current Price </th>
-              <td mat-cell *matCellDef="let element">
-                \${{ element.price | number: '1.2-2' }}
-              </td>
-            </ng-container>
-
-            <!-- Chg % -->
-            <ng-container matColumnDef="change_pct">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Chg % </th>
-              <td mat-cell *matCellDef="let element" [ngStyle]="{'color': element.change_pct >= 0 ? '#00ff88' : '#ff4a4a'}">
-                {{ element.change_pct | number: '1.2-2' }}%
-              </td>
-            </ng-container>
-
-            <!-- RVOL -->
-            <ng-container matColumnDef="rvol">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> RVOL </th>
-              <td mat-cell *matCellDef="let element">
-                {{ element.rvol | number: '1.2-2' }}x
-              </td>
-            </ng-container>
-
-            <!-- VWAP Dist -->
-            <ng-container matColumnDef="vwap_dist">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> VWAP % </th>
-              <td mat-cell *matCellDef="let element" [ngStyle]="{'color': element.vwap_dist >= 0 ? '#00ff88' : '#ff4a4a'}">
-                {{ element.vwap_dist | number: '1.2-2' }}%
-              </td>
-            </ng-container>
-
-            <!-- Score -->
-            <ng-container matColumnDef="score">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Score </th>
-              <td mat-cell *matCellDef="let element" style="font-weight: bold; color: #ff4a4a;">
-                {{ element.score }}/5
-              </td>
-            </ng-container>
-
-            <!-- Trigger Time (updated_at) -->
-            <ng-container matColumnDef="updated_at">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Trigger Time </th>
-              <td mat-cell *matCellDef="let element" style="color: #bbb;">
-                {{ element.updated_at ? (element.updated_at | date: 'MM/dd HH:mm') : '-' }}
-              </td>
-            </ng-container>
-
-            <!-- Group Name -->
-            <ng-container matColumnDef="group_name">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Group </th>
-              <td mat-cell *matCellDef="let element" class="group-cell">
-                {{ element.group_name }}
-              </td>
-            </ng-container>
-
-            <!-- Actions -->
-            <ng-container matColumnDef="actions">
-              <th mat-header-cell *matHeaderCellDef> Actions </th>
-              <td mat-cell *matCellDef="let element">
-                <div class="actions-container">
-                  <a [href]="'https://www.tradingview.com/chart/?symbol=' + element.symbol" target="_blank" title="Open TradingView Chart" class="action-btn">
-                    <svg viewBox="0 0 36 36" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <circle cx="18" cy="18" r="16" fill="#131722" stroke="#2962ff" stroke-width="1.5"/>
-                      <path d="M12 24V16H15V24H12ZM17 24V10H20V24H17ZM22 24V14H25V24H22Z" fill="#2962ff"/>
-                    </svg>
+          <div class="cards-list">
+            <div *ngFor="let card of filteredBearish" class="symbol-card bearish-card" [class.stale]="card.status === 'stale' || card.status === 'expired'">
+              
+              <!-- Card Top Header -->
+              <div class="card-top">
+                <div class="sym-group">
+                  <a [href]="'https://www.tradingview.com/chart/?symbol=' + card.symbol" target="_blank" class="sym-link">
+                    {{ card.symbol }}
                   </a>
-                  <a [href]="'https://finviz.com/quote.ashx?t=' + element.symbol" target="_blank" title="Open Finviz Analysis" class="action-btn">
-                    <svg viewBox="0 0 36 36" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <circle cx="18" cy="18" r="16" fill="#131722" stroke="#388e3c" stroke-width="1.5"/>
-                      <path d="M14 22V14H16V22H14ZM14 18H10V16H14V18ZM20 26V10H22V26H20ZM26 20V12H28V20H26ZM26 16H22V14H26V16Z" fill="#388e3c"/>
-                    </svg>
-                  </a>
+                  <span class="mode-badge" [class.ew]="card.signal_mode === 'early_warning'">
+                    {{ card.signal_mode === 'early_warning' ? 'EW' : 'CONFIRMED' }}
+                  </span>
                 </div>
-              </td>
-            </ng-container>
+                <div class="score-badge" [class]="'quality-' + card.signal_quality.toLowerCase()">
+                  Score: {{ card.signal_score }} ({{ card.signal_quality }})
+                </div>
+              </div>
 
-            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-            <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
-          </table>
-          <div *ngIf="bearishDataSource.data.length === 0" class="empty-list-msg">
-            No bearish setups active.
+              <!-- Price Move Grid -->
+              <div class="price-grid">
+                <div class="price-item">
+                  <span class="price-lbl">Trigger Price</span>
+                  <span class="price-val">\${{ card.trigger_price | number: '1.2-2' }}</span>
+                </div>
+                <div class="price-item">
+                  <span class="price-lbl">Current Price</span>
+                  <span class="price-val">\${{ card.current_price | number: '1.2-2' }}</span>
+                </div>
+                <div class="price-item performance">
+                  <span class="price-lbl">Move %</span>
+                  <span class="price-val pct-move" [class.positive]="getMovePct(card) >= 0" [class.negative]="getMovePct(card) < 0">
+                    {{ getMovePct(card) | number: '1.2-2' }}%
+                  </span>
+                </div>
+              </div>
+
+              <!-- Age & Lifecycle Status -->
+              <div class="card-details">
+                <div class="detail-row">
+                  <span class="detail-lbl">Age:</span>
+                  <span class="detail-val">{{ getSignalAge(card) }}m ago</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-lbl">Status:</span>
+                  <span class="detail-val status-tag" [class]="card.status">
+                    {{ card.status | uppercase }}
+                  </span>
+                </div>
+                <div class="detail-row" *ngIf="card.confirmation_count > 1">
+                  <span class="detail-lbl">Confirmations:</span>
+                  <span class="detail-val conf-tag">
+                    {{ getConfirmationsList(card) }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Badges reasons -->
+              <div class="reasons-list" *ngIf="card.score_reasons?.length > 0">
+                <span *ngFor="let reason of card.score_reasons" class="reason-badge" [class.penalty]="reason.startsWith('-')">
+                  {{ reason }}
+                </span>
+              </div>
+
+              <!-- Conflict Indicator -->
+              <div class="conflict-banner" *ngIf="card.status === 'conflict'">
+                ⚠️ CONFLICTING DIRECTION DETECTED
+              </div>
+
+              <!-- Card Bottom Actions -->
+              <div class="card-actions">
+                <a [href]="'https://www.tradingview.com/chart/?symbol=' + card.symbol" target="_blank" class="action-btn tv-btn">TradingView</a>
+                <a [href]="'https://finviz.com/quote.ashx?t=' + card.symbol" target="_blank" class="action-btn fz-btn">Finviz</a>
+              </div>
+
+            </div>
+            <div *ngIf="filteredBearish.length === 0" class="empty-list">No bearish setups match active filters.</div>
           </div>
         </div>
 
@@ -263,8 +243,14 @@ import { SupabaseService } from '../../services/supabase.service';
       padding: 16px 24px;
       color: #fff;
     }
+    .screener-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
     h2 {
-      margin: 0 0 16px 0;
+      margin: 0;
       font-size: 1.5rem;
       font-weight: 500;
       color: #fff;
@@ -281,6 +267,62 @@ import { SupabaseService } from '../../services/supabase.service';
       color: #00ff88;
       border-color: #00ff88;
     }
+    
+    /* Advanced Filter Panel */
+    .filter-panel {
+      background: #1c2030;
+      border-radius: 8px;
+      border: 1px solid #2a2e39;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    .search-box {
+      margin-bottom: 12px;
+    }
+    .search-input {
+      width: 100%;
+      background: #131722;
+      border: 1px solid #2a2e39;
+      border-radius: 4px;
+      padding: 8px 12px;
+      color: #fff;
+      font-size: 0.9rem;
+    }
+    .search-input:focus {
+      outline: none;
+      border-color: #2962ff;
+    }
+    .filters-row {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .group-label {
+      color: #888;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    .checkbox-label {
+      font-size: 0.85rem;
+      color: #ddd;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .toggles .checkbox-label {
+      background: #131722;
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid #2a2e39;
+    }
+
     .spinner-container {
       display: flex;
       flex-direction: column;
@@ -299,18 +341,19 @@ import { SupabaseService } from '../../services/supabase.service';
       color: #888;
       border: 1px solid #2a2e39;
     }
+
+    /* Side-by-Side Card Columns */
     .tables-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 24px;
     }
-    .table-wrapper {
-      background: #1c2030;
+    .column-wrapper {
+      background: #131722;
       border-radius: 8px;
-      border: 1px solid #2a2e39;
       overflow: hidden;
     }
-    .table-header {
+    .column-header {
       padding: 12px 16px;
       font-weight: bold;
       font-size: 0.95rem;
@@ -324,117 +367,264 @@ import { SupabaseService } from '../../services/supabase.service';
       background: rgba(59, 18, 18, 0.5);
       color: #ff4a4a;
     }
-    table {
-      width: 100%;
-      background: transparent !important;
-      border-collapse: collapse;
-    }
-    th {
-      color: #888 !important;
-      font-weight: 500 !important;
-      font-size: 0.8rem !important;
-      background: #171b26 !important;
-      border-bottom: 1px solid #2a2e39 !important;
-    }
-    td {
-      color: #fff !important;
-      border-bottom: 1px solid #1e222d !important;
-      font-size: 0.85rem !important;
-    }
-    tr:hover td {
-      background: #2a2e39 !important;
-    }
-    .sym-link {
-      color: #2962ff;
-      text-decoration: none;
-      font-weight: 500;
-    }
-    .sym-link:hover {
-      text-decoration: underline;
-    }
-    .group-cell {
-      color: #aaa !important;
-      font-size: 0.8rem !important;
-    }
-    .actions-container {
+    .cards-list {
       display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-    .action-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition: transform 0.1s ease;
-    }
-    .action-btn:hover {
-      transform: scale(1.1);
-    }
-    .empty-list-msg {
-      padding: 24px;
-      text-align: center;
-      color: #888;
-      font-size: 0.85rem;
-    }
-    ::ng-deep .mat-sort-header-container {
-      display: flex;
-      align-items: center;
-    }
-    ::ng-deep .mat-sort-header-arrow {
-      color: #888 !important;
+      flex-direction: column;
+      gap: 16px;
+      padding: 16px;
     }
 
-    /* Mobile Responsive Tables Swipe-Scroll */
+    /* Symbol Card styling */
+    .symbol-card {
+      background: #1c2030;
+      border-radius: 8px;
+      border: 1px solid #2a2e39;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .symbol-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .bullish-card {
+      border-left: 4px solid #00ff88;
+    }
+    .bearish-card {
+      border-left: 4px solid #ff4a4a;
+    }
+    .symbol-card.stale {
+      opacity: 0.65;
+    }
+
+    /* Card Components */
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sym-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sym-link {
+      color: #fff;
+      text-decoration: none;
+      font-size: 1.15rem;
+      font-weight: bold;
+    }
+    .sym-link:hover {
+      color: #2962ff;
+    }
+    .mode-badge {
+      font-size: 0.65rem;
+      font-weight: bold;
+      background: #2962ff;
+      color: #fff;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .mode-badge.ew {
+      background: #f57c00;
+    }
+    .score-badge {
+      font-size: 0.75rem;
+      font-weight: bold;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: #2a2e39;
+    }
+    .quality-a {
+      color: #00ff88;
+      background: rgba(13, 44, 29, 0.3);
+    }
+    .quality-b {
+      color: #29b6f6;
+      background: rgba(41, 182, 246, 0.15);
+    }
+    .quality-c {
+      color: #ffca28;
+      background: rgba(255, 202, 40, 0.15);
+    }
+    .quality-reject {
+      color: #ff4a4a;
+      background: rgba(255, 74, 74, 0.15);
+    }
+
+    .price-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      background: #131722;
+      border-radius: 6px;
+      padding: 10px;
+      border: 1px solid #2a2e39;
+    }
+    .price-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .price-lbl {
+      font-size: 0.7rem;
+      color: #888;
+      text-transform: uppercase;
+    }
+    .price-val {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #fff;
+    }
+    .pct-move.positive {
+      color: #00ff88;
+    }
+    .pct-move.negative {
+      color: #ff4a4a;
+    }
+
+    .card-details {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.8rem;
+      border-bottom: 1px solid #2a2e39;
+      padding-bottom: 10px;
+    }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+    }
+    .detail-lbl {
+      color: #888;
+    }
+    .detail-val {
+      color: #fff;
+      font-weight: 500;
+    }
+    .status-tag {
+      font-size: 0.7rem;
+      font-weight: bold;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: #2a2e39;
+    }
+    .status-tag.fresh {
+      color: #00ff88;
+      background: rgba(13, 44, 29, 0.3);
+    }
+    .status-tag.watch {
+      color: #29b6f6;
+    }
+    .status-tag.stale {
+      color: #aaa;
+    }
+    .status-tag.expired {
+      color: #888;
+    }
+    .status-tag.conflict {
+      color: #ff4a4a;
+      background: rgba(255, 74, 74, 0.15);
+    }
+    .conf-tag {
+      color: #29b6f6;
+      background: rgba(41, 182, 246, 0.1);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .reasons-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .reason-badge {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(0, 255, 136, 0.1);
+      color: #00ff88;
+    }
+    .reason-badge.penalty {
+      background: rgba(255, 74, 74, 0.1);
+      color: #ff4a4a;
+    }
+
+    .conflict-banner {
+      background: rgba(255, 74, 74, 0.15);
+      border: 1px solid #ff4a4a;
+      color: #ff4a4a;
+      padding: 6px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .action-btn {
+      flex: 1;
+      text-align: center;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: background 0.2s ease;
+    }
+    .tv-btn {
+      background: #2962ff;
+      color: #fff;
+    }
+    .tv-btn:hover {
+      background: #1565c0;
+    }
+    .fz-btn {
+      background: #388e3c;
+      color: #fff;
+    }
+    .fz-btn:hover {
+      background: #2e7d32;
+    }
+    .empty-list {
+      text-align: center;
+      color: #888;
+      padding: 24px;
+      font-size: 0.85rem;
+    }
+
     @media (max-width: 1024px) {
       .tables-grid {
         grid-template-columns: 1fr;
         gap: 16px;
       }
     }
-    @media (max-width: 768px) {
-      .screener-container {
-        padding: 12px 10px;
-      }
-      .table-wrapper {
-        overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch;
-      }
-      table {
-        min-width: 650px !important;
-      }
-      th, td {
-        padding: 8px 4px !important;
-        font-size: 0.78rem !important;
-      }
-    }
   `]
 })
 export class AlphaTrend implements OnInit, OnDestroy {
-  displayedColumns = ['symbol', 'trigger_price', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'updated_at', 'group_name', 'actions'];
   allSetups: any[] = [];
+  filteredBullish: any[] = [];
+  filteredBearish: any[] = [];
+  totalBullish = 0;
+  totalBearish = 0;
   loading = true;
-  
-  bullishDataSource = new MatTableDataSource<any>([]);
-  bearishDataSource = new MatTableDataSource<any>([]);
+
+  // Filters
+  searchQuery = '';
+  filterQualityA = true;
+  filterQualityB = true;
+  filterQualityC = false;
+  showDuplicates = false;
+  showRejected = false;
+  showStale = false;
 
   private destroy$ = new Subject<void>();
   private pollInterval: any;
-
-  @ViewChild('bullishSort', { static: false }) set bullishSort(sort: MatSort) {
-    this.bullishDataSource.sortingDataAccessor = (item, property) => this.customSortAccessor(item, property);
-    this.bullishDataSource.sort = sort;
-  }
-  @ViewChild('bearishSort', { static: false }) set bearishSort(sort: MatSort) {
-    this.bearishDataSource.sortingDataAccessor = (item, property) => this.customSortAccessor(item, property);
-    this.bearishDataSource.sort = sort;
-  }
-
-  customSortAccessor(item: any, property: string): string | number {
-    if (property === 'updated_at') {
-      return item.updated_at ? new Date(item.updated_at).getTime() : 0;
-    }
-    return item[property];
-  }
 
   constructor(
     private supabaseService: SupabaseService,
@@ -460,22 +650,12 @@ export class AlphaTrend implements OnInit, OnDestroy {
       .subscribe({
         next: (data) => {
           // Filter specifically for AlphaTrend setups
-          const alphaSetups = data
-            .filter(s => s.group_name.startsWith('AlphaTrend -'))
-            .map(s => ({
-              ...s,
-              // Strip "AlphaTrend - " prefix for cleaner display on the page
-              group_name: s.group_name.replace('AlphaTrend - ', '')
-            }));
-          
-          // Filter duplicates per symbol-group combination
-          const uniqueSetups = Array.from(
-            new Map(alphaSetups.map(item => [item.symbol + '_' + item.group_name, item])).values()
+          this.allSetups = data.filter(s => 
+            s.strategy_name === 'alphatrend_reversal' || 
+            s.group_name.startsWith('AlphaTrend -')
           );
-
-          this.allSetups = uniqueSetups;
-          this.bullishDataSource.data = uniqueSetups.filter(s => s.direction === 'bullish');
-          this.bearishDataSource.data = uniqueSetups.filter(s => s.direction === 'bearish');
+          
+          this.applyFilters();
           this.loading = false;
           this.cdr.detectChanges();
         },
@@ -485,6 +665,77 @@ export class AlphaTrend implements OnInit, OnDestroy {
           this.cdr.detectChanges();
         }
       });
+  }
+
+  applyFilters(): void {
+    let filtered = this.allSetups;
+
+    // Search filter
+    if (this.searchQuery) {
+      const q = this.searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(s => s.symbol.toLowerCase().includes(q));
+    }
+
+    // Quality filter
+    filtered = filtered.filter(s => {
+      if (s.signal_quality === 'A' && !this.filterQualityA) return false;
+      if (s.signal_quality === 'B' && !this.filterQualityB) return false;
+      if (s.signal_quality === 'C' && !this.filterQualityC) return false;
+      if (s.signal_quality === 'Reject' && !this.showRejected) return false;
+      return true;
+    });
+
+    // Duplicates filter
+    if (!this.showDuplicates) {
+      filtered = filtered.filter(s => s.status !== 'duplicate');
+    }
+
+    // Rejected status filter
+    if (!this.showRejected) {
+      filtered = filtered.filter(s => s.status !== 'rejected');
+    }
+
+    // Stale/Expired status filter
+    if (!this.showStale) {
+      filtered = filtered.filter(s => s.status !== 'stale' && s.status !== 'expired');
+    }
+
+    // Sort by signal_score descending
+    filtered.sort((a, b) => (b.signal_score || 0) - (a.signal_score || 0));
+
+    // Distribute into Bullish / Bearish
+    const bullishList = filtered.filter(s => s.direction === 'bullish');
+    const bearishList = filtered.filter(s => s.direction === 'bearish');
+
+    this.totalBullish = bullishList.length;
+    this.totalBearish = bearishList.length;
+
+    // Limit to top 20 cards each
+    this.filteredBullish = bullishList.slice(0, 20);
+    this.filteredBearish = bearishList.slice(0, 20);
+  }
+
+  getMovePct(card: any): number {
+    const trigger = Number(card.trigger_price) || Number(card.price) || 1.0;
+    const current = Number(card.current_price) || Number(card.price) || 0.0;
+    if (card.direction === 'bullish') {
+      return ((current - trigger) / trigger) * 100;
+    } else {
+      return ((trigger - current) / trigger) * 100;
+    }
+  }
+
+  getSignalAge(card: any): number {
+    const timeVal = card.signal_bar_time ? new Date(card.signal_bar_time).getTime() : new Date().getTime();
+    const ageMins = Math.round((Date.now() - timeVal) / 60000);
+    return ageMins >= 0 ? ageMins : 0;
+  }
+
+  getConfirmationsList(card: any): string {
+    if (card.confirmations && Array.isArray(card.confirmations)) {
+      return card.confirmations.map((c: string) => c === 'alphatrend_reversal' ? 'AT' : 'Cross').join(', ');
+    }
+    return card.strategy_name === 'alphatrend_reversal' ? 'AT' : 'Cross';
   }
 
   ngOnDestroy(): void {

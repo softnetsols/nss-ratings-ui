@@ -34,9 +34,9 @@ export class SupabaseService {
 
   getScreenerSetups(): Observable<any[]> {
     const fetchData = this.supabase
-      .from('screener_setups')
+      .from('screener_signals')
       .select('*')
-      .order('score', { ascending: false });
+      .order('signal_score', { ascending: false });
 
     return from(fetchData.then(({ data, error }) => {
       if (error) {
