@@ -50,7 +50,7 @@ exports.handler = async (event, context) => {
         score: item.score,
         age: item.age,
         group_name: group_name,
-        updated_at: new Date().toISOString()
+        updated_at: item.signal_time ? new Date(Number(item.signal_time)).toISOString() : new Date().toISOString()
       });
     }
 
@@ -65,7 +65,7 @@ exports.handler = async (event, context) => {
         score: item.score,
         age: item.age,
         group_name: group_name,
-        updated_at: new Date().toISOString()
+        updated_at: item.signal_time ? new Date(Number(item.signal_time)).toISOString() : new Date().toISOString()
       });
     }
 
