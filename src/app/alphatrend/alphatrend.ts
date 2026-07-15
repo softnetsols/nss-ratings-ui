@@ -53,9 +53,17 @@ import { SupabaseService } from '../../services/supabase.service';
               </td>
             </ng-container>
 
+            <!-- Trigger Price -->
+            <ng-container matColumnDef="trigger_price">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Trigger Price </th>
+              <td mat-cell *matCellDef="let element">
+                \${{ (element.trigger_price || element.price) | number: '1.2-2' }}
+              </td>
+            </ng-container>
+
             <!-- Price -->
             <ng-container matColumnDef="price">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Price </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Current Price </th>
               <td mat-cell *matCellDef="let element">
                 \${{ element.price | number: '1.2-2' }}
               </td>
@@ -154,9 +162,17 @@ import { SupabaseService } from '../../services/supabase.service';
               </td>
             </ng-container>
 
+            <!-- Trigger Price -->
+            <ng-container matColumnDef="trigger_price">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Trigger Price </th>
+              <td mat-cell *matCellDef="let element">
+                \${{ (element.trigger_price || element.price) | number: '1.2-2' }}
+              </td>
+            </ng-container>
+
             <!-- Price -->
             <ng-container matColumnDef="price">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header> Price </th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header> Current Price </th>
               <td mat-cell *matCellDef="let element">
                 \${{ element.price | number: '1.2-2' }}
               </td>
@@ -394,7 +410,7 @@ import { SupabaseService } from '../../services/supabase.service';
   `]
 })
 export class AlphaTrend implements OnInit, OnDestroy {
-  displayedColumns = ['symbol', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'updated_at', 'group_name', 'actions'];
+  displayedColumns = ['symbol', 'trigger_price', 'price', 'change_pct', 'rvol', 'vwap_dist', 'score', 'updated_at', 'group_name', 'actions'];
   allSetups: any[] = [];
   loading = true;
   
