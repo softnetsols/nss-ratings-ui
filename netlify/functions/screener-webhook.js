@@ -435,6 +435,7 @@ exports.handler = async (event, context) => {
           }
         }
       }
+    }
 
     // Clean up database signals that are older than 1 week (7 days)
     const oneWeekAgo = new Date();
