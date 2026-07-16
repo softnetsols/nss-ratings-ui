@@ -88,6 +88,8 @@ import { SupabaseService } from '../../services/supabase.service';
                   <th (click)="toggleSort('trigger_price')" class="sortable-th">Trigger <span *ngIf="sortKey === 'trigger_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('current_price')" class="sortable-th">Current <span *ngIf="sortKey === 'current_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('move_pct')" class="sortable-th">Move % <span *ngIf="sortKey === 'move_pct'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('stop_price')" class="sortable-th">Stop <span *ngIf="sortKey === 'stop_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('target2_price')" class="sortable-th">Target 2 <span *ngIf="sortKey === 'target2_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('signal_bar_time')" class="sortable-th">Time <span *ngIf="sortKey === 'signal_bar_time'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('status')" class="sortable-th" style="text-align: center;">St <span *ngIf="sortKey === 'status'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th>Reasons</th>
@@ -95,9 +97,9 @@ import { SupabaseService } from '../../services/supabase.service';
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let s of filteredBullish" [class.stale-row]="s.status === 'stale' || s.status === 'expired' || s.status === 'duplicate'">
+                <tr *ngFor="let s of filteredBullish" (click)="openTradePlan(s)" [class.stale-row]="s.status === 'stale' || s.status === 'expired' || s.status === 'duplicate'" style="cursor: pointer;">
                   <td class="sym-cell">
-                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="symbol-link">{{ s.symbol }}</a>
+                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="symbol-link" (click)="$event.stopPropagation()">{{ s.symbol }}</a>
                   </td>
                   <td style="text-align: center;">
                     <span class="mode-tag" [class.ew]="s.signal_mode === 'early_warning'" [title]="s.signal_mode === 'early_warning' ? 'Early Warning' : 'Confirmed'">
@@ -109,11 +111,13 @@ import { SupabaseService } from '../../services/supabase.service';
                       {{ s.signal_score }} ({{ s.signal_quality }})
                     </span>
                   </td>
-                  <td class="price-col">\${{ s.trigger_price | number: '1.2-2' }}</td>
-                  <td class="price-col">\${{ s.current_price | number: '1.2-2' }}</td>
+                  <td class="price-col">\${{ formatPrice(s.trigger_price, s.symbol) }}</td>
+                  <td class="price-col">\${{ formatPrice(s.current_price, s.symbol) }}</td>
                   <td class="pct-col" [class.positive]="getMovePct(s) >= 0" [class.negative]="getMovePct(s) < 0">
                     {{ getMovePct(s) | number: '1.2-2' }}%
                   </td>
+                  <td class="price-col stop-col" style="color: #f87171;">\${{ formatPrice(s.stop_price, s.symbol) }}</td>
+                  <td class="price-col target-col" style="color: #34d399; font-weight: 500;">\${{ formatPrice(s.target2_price, s.symbol) }}</td>
                   <td class="time-col">{{ s.signal_bar_time | date: 'MM/dd hh:mm a' }}</td>
                   <td style="text-align: center;">
                     <span class="status-lbl" [class]="s.status" [title]="s.status | uppercase">{{ getStatusShortCode(s.status) }}</span>
@@ -127,12 +131,12 @@ import { SupabaseService } from '../../services/supabase.service';
                     </div>
                   </td>
                   <td class="actions-cell">
-                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="mini-btn tv" title="TradingView">TV</a>
-                    <a [href]="'https://finviz.com/quote.ashx?t=' + s.symbol" target="_blank" class="mini-btn fz" title="Finviz">FZ</a>
+                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="mini-btn tv" title="TradingView" (click)="$event.stopPropagation()">TV</a>
+                    <a [href]="'https://finviz.com/quote.ashx?t=' + s.symbol" target="_blank" class="mini-btn fz" title="Finviz" (click)="$event.stopPropagation()">FZ</a>
                   </td>
                 </tr>
                 <tr *ngIf="filteredBullish.length === 0">
-                  <td colspan="10" class="empty-row">No bullish setups match active filters.</td>
+                  <td colspan="12" class="empty-row">No bullish setups match active filters.</td>
                 </tr>
               </tbody>
             </table>
@@ -160,6 +164,8 @@ import { SupabaseService } from '../../services/supabase.service';
                   <th (click)="toggleSort('trigger_price')" class="sortable-th">Trigger <span *ngIf="sortKey === 'trigger_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('current_price')" class="sortable-th">Current <span *ngIf="sortKey === 'current_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('move_pct')" class="sortable-th">Move % <span *ngIf="sortKey === 'move_pct'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('stop_price')" class="sortable-th">Stop <span *ngIf="sortKey === 'stop_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('target2_price')" class="sortable-th">Target 2 <span *ngIf="sortKey === 'target2_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('signal_bar_time')" class="sortable-th">Time <span *ngIf="sortKey === 'signal_bar_time'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('status')" class="sortable-th" style="text-align: center;">St <span *ngIf="sortKey === 'status'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th>Reasons</th>
@@ -167,9 +173,9 @@ import { SupabaseService } from '../../services/supabase.service';
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let s of filteredBearish" [class.stale-row]="s.status === 'stale' || s.status === 'expired' || s.status === 'duplicate'">
+                <tr *ngFor="let s of filteredBearish" (click)="openTradePlan(s)" [class.stale-row]="s.status === 'stale' || s.status === 'expired' || s.status === 'duplicate'" style="cursor: pointer;">
                   <td class="sym-cell">
-                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="symbol-link">{{ s.symbol }}</a>
+                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="symbol-link" (click)="$event.stopPropagation()">{{ s.symbol }}</a>
                   </td>
                   <td style="text-align: center;">
                     <span class="mode-tag" [class.ew]="s.signal_mode === 'early_warning'" [title]="s.signal_mode === 'early_warning' ? 'Early Warning' : 'Confirmed'">
@@ -181,11 +187,13 @@ import { SupabaseService } from '../../services/supabase.service';
                       {{ s.signal_score }} ({{ s.signal_quality }})
                     </span>
                   </td>
-                  <td class="price-col">\${{ s.trigger_price | number: '1.2-2' }}</td>
-                  <td class="price-col">\${{ s.current_price | number: '1.2-2' }}</td>
+                  <td class="price-col">\${{ formatPrice(s.trigger_price, s.symbol) }}</td>
+                  <td class="price-col">\${{ formatPrice(s.current_price, s.symbol) }}</td>
                   <td class="pct-col" [class.positive]="getMovePct(s) >= 0" [class.negative]="getMovePct(s) < 0">
                     {{ getMovePct(s) | number: '1.2-2' }}%
                   </td>
+                  <td class="price-col stop-col" style="color: #f87171;">\${{ formatPrice(s.stop_price, s.symbol) }}</td>
+                  <td class="price-col target-col" style="color: #34d399; font-weight: 500;">\${{ formatPrice(s.target2_price, s.symbol) }}</td>
                   <td class="time-col">{{ s.signal_bar_time | date: 'MM/dd hh:mm a' }}</td>
                   <td style="text-align: center;">
                     <span class="status-lbl" [class]="s.status" [title]="s.status | uppercase">{{ getStatusShortCode(s.status) }}</span>
@@ -199,12 +207,12 @@ import { SupabaseService } from '../../services/supabase.service';
                     </div>
                   </td>
                   <td class="actions-cell">
-                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="mini-btn tv" title="TradingView">TV</a>
-                    <a [href]="'https://finviz.com/quote.ashx?t=' + s.symbol" target="_blank" class="mini-btn fz" title="Finviz">FZ</a>
+                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="mini-btn tv" title="TradingView" (click)="$event.stopPropagation()">TV</a>
+                    <a [href]="'https://finviz.com/quote.ashx?t=' + s.symbol" target="_blank" class="mini-btn fz" title="Finviz" (click)="$event.stopPropagation()">FZ</a>
                   </td>
                 </tr>
                 <tr *ngIf="filteredBearish.length === 0">
-                  <td colspan="10" class="empty-row">No bearish setups match active filters.</td>
+                  <td colspan="12" class="empty-row">No bearish setups match active filters.</td>
                 </tr>
               </tbody>
             </table>
@@ -217,6 +225,95 @@ import { SupabaseService } from '../../services/supabase.service';
           </div>
         </div>
 
+      </div>
+
+      <!-- Trade Plan Modal Overlay -->
+      <div class="modal-overlay" *ngIf="selectedSignal" (click)="closeTradePlan()">
+        <div class="modal-card" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <span class="modal-title">
+              <span class="modal-symbol">{{ selectedSignal.symbol }}</span>
+              <span class="modal-strategy">({{ selectedSignal.strategy_name === 'alphatrend_reversal' ? 'AlphaTrend' : 'Golden Cross' }})</span>
+              <span class="modal-direction" [class.bullish]="selectedSignal.direction === 'bullish'" [class.bearish]="selectedSignal.direction === 'bearish'">
+                {{ selectedSignal.direction | uppercase }}
+              </span>
+            </span>
+            <button class="close-btn" (click)="closeTradePlan()">✖</button>
+          </div>
+          
+          <div class="modal-body">
+            <!-- Alert for wide risk / invalid plans -->
+            <div class="alert-box warning-alert" *ngIf="selectedSignal.trade_plan_quality === 'wide_risk'">
+              ⚠️ <strong>Wide Risk Warning:</strong> Stop loss is more than 2% away from entry ({{ getRiskPct(selectedSignal) | number: '1.1-2' }}%). Reduce size.
+            </div>
+            <div class="alert-box danger-alert" *ngIf="selectedSignal.trade_plan_quality === 'invalid'">
+              🚨 <strong>Invalid Trade Plan:</strong> Plan is invalid. {{ selectedSignal.invalidation_reason || 'Stop is not positioned correctly.' }}
+            </div>
+
+            <div class="plan-section">
+              <div class="plan-desc">
+                {{ selectedSignal.direction === 'bullish' 
+                   ? 'Entry is based on trigger price. Stop is below recent support (lows / swing lows). Target 2 is the main exit price.' 
+                   : 'Entry is based on trigger price. Stop is above recent resistance (highs / swing highs). Target 2 is the main cover price.' 
+                }}
+              </div>
+              
+              <div class="plan-metrics">
+                <div class="metric-row">
+                  <span class="metric-label">Estimated Entry:</span>
+                  <span class="metric-value font-mono">\${{ formatPrice(selectedSignal.entry_price_est, selectedSignal.symbol) }}</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Stop Loss:</span>
+                  <span class="metric-value font-mono stop-text">\${{ formatPrice(selectedSignal.stop_price, selectedSignal.symbol) }}</span>
+                </div>
+                <div class="metric-row highlight-target">
+                  <span class="metric-label">Target 1 (Scalp / 1R):</span>
+                  <span class="metric-value font-mono target-text">\${{ formatPrice(selectedSignal.target1_price, selectedSignal.symbol) }}</span>
+                </div>
+                <div class="metric-row highlight-target active-target">
+                  <span class="metric-label">Target 2 (Main Exit / 2R):</span>
+                  <span class="metric-value font-mono target-text font-bold">\${{ formatPrice(selectedSignal.target2_price, selectedSignal.symbol) }}</span>
+                </div>
+                <div class="metric-row highlight-target">
+                  <span class="metric-label">Target 3 (Runner / 3R):</span>
+                  <span class="metric-value font-mono target-text">\${{ formatPrice(selectedSignal.target3_price, selectedSignal.symbol) }}</span>
+                </div>
+                <div class="metric-row" *ngIf="selectedSignal.risk_per_share">
+                  <span class="metric-label">Risk Per Share:</span>
+                  <span class="metric-value font-mono">\${{ formatPrice(selectedSignal.risk_per_share, selectedSignal.symbol) }}</span>
+                </div>
+              </div>
+
+              <!-- Embed reasons inside row click modal as requested -->
+              <div class="reasons-box">
+                <h4 style="margin: 0 0 8px 0; font-size: 0.9rem; color: #ffffff;">Signal Reasons & Parameters:</h4>
+                <div class="modal-reasons-list" style="display: flex; flex-wrap: wrap; gap: 6px;">
+                  <span *ngFor="let r of selectedSignal.score_reasons" class="reason-pill" [class.penalty-pill]="isPenalty(r)" style="background: rgba(255,255,255,0.05); color: #9ca3af; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem;">
+                    {{ r }}
+                  </span>
+                  <span *ngIf="!selectedSignal.score_reasons || selectedSignal.score_reasons.length === 0" class="no-reasons">-</span>
+                </div>
+                <div style="font-size: 0.75rem; color: #6b7280; margin-top: 8px;" *ngIf="selectedSignal.atr_at_signal">
+                  ATR at signal: {{ selectedSignal.atr_at_signal | number: '1.2-4' }}
+                </div>
+              </div>
+
+              <div class="plan-rules" style="margin-top: 16px;">
+                <h4 style="margin: 0 0 8px 0; font-size: 0.9rem; color: #ffffff;">Execution Rules:</h4>
+                <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: #9ca3af; line-height: 1.45;">
+                  <li *ngIf="selectedSignal.direction === 'bullish'">Take partial profit at Target 1 (1:1 Reward to Risk).</li>
+                  <li *ngIf="selectedSignal.direction === 'bullish'">Exit main position at Target 2 (2:1 Reward to Risk).</li>
+                  <li *ngIf="selectedSignal.direction === 'bullish'">Trail remaining shares using swing levels. Exit remaining if opposite crossover triggers or stop is hit.</li>
+                  
+                  <li *ngIf="selectedSignal.direction === 'bearish'">Cover partial profit at Target 1 (1:1 Reward to Risk).</li>
+                  <li *ngIf="selectedSignal.direction === 'bearish'">Cover main position at Target 2 (2:1 Reward to Risk).</li>
+                  <li *ngIf="selectedSignal.direction === 'bearish'">Trail remaining shares using swing levels. Exit remaining if opposite crossover triggers or stop is hit.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   `,
@@ -620,6 +717,133 @@ import { SupabaseService } from '../../services/supabase.service';
         gap: 12px;
       }
     }
+
+    /* Modal styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-card {
+      background: #15181f;
+      border: 1px solid #2a2e39;
+      border-radius: 8px;
+      width: 95%;
+      max-width: 500px;
+      padding: 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #2a2e39;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .modal-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-symbol {
+      color: #ffffff;
+    }
+    .modal-strategy {
+      color: #9ca3af;
+      font-size: 0.85rem;
+    }
+    .modal-direction {
+      font-size: 0.8rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+    .modal-direction.bullish {
+      background: rgba(0, 255, 136, 0.1);
+      color: #00ff88;
+    }
+    .modal-direction.bearish {
+      background: rgba(255, 74, 74, 0.1);
+      color: #ff4a4a;
+    }
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: #9ca3af;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+    .close-btn:hover {
+      color: #ffffff;
+    }
+    .alert-box {
+      border-radius: 4px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+      line-height: 1.4;
+    }
+    .warning-alert {
+      background: rgba(245, 158, 11, 0.1);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+    .danger-alert {
+      background: rgba(239, 68, 68, 0.1);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    .plan-desc {
+      font-size: 0.9rem;
+      color: #9ca3af;
+      margin-bottom: 16px;
+      line-height: 1.45;
+    }
+    .plan-metrics {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #0f1115;
+      padding: 14px;
+      border-radius: 6px;
+      border: 1px solid #2a2e39;
+      margin-bottom: 16px;
+    }
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+    .metric-label {
+      color: #9ca3af;
+    }
+    .metric-value {
+      color: #ffffff;
+    }
+    .metric-value.stop-text {
+      color: #f87171;
+    }
+    .metric-value.target-text {
+      color: #34d399;
+    }
+    .active-target {
+      background: rgba(52, 211, 153, 0.05);
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px dashed rgba(52, 211, 153, 0.3);
+    }
   `]
 })
 export class CustomGroup implements OnInit, OnDestroy {
@@ -629,6 +853,7 @@ export class CustomGroup implements OnInit, OnDestroy {
   totalBullish = 0;
   totalBearish = 0;
   loading = true;
+  selectedSignal: any = null;
 
   // Pagination parameters
   bullishPage = 1;
@@ -806,6 +1031,12 @@ export class CustomGroup implements OnInit, OnDestroy {
       if (this.sortKey === 'move_pct') {
         valA = this.getMovePct(a);
         valB = this.getMovePct(b);
+      } else if (this.sortKey === 'stop_price') {
+        valA = Number(a.stop_price) || 0;
+        valB = Number(b.stop_price) || 0;
+      } else if (this.sortKey === 'target2_price') {
+        valA = Number(a.target2_price) || 0;
+        valB = Number(b.target2_price) || 0;
       } else if (this.sortKey === 'signal_bar_time') {
         valA = a.signal_bar_time ? new Date(a.signal_bar_time).getTime() : 0;
         valB = b.signal_bar_time ? new Date(b.signal_bar_time).getTime() : 0;
@@ -844,6 +1075,32 @@ export class CustomGroup implements OnInit, OnDestroy {
     } else {
       return ((trigger - current) / trigger) * 100;
     }
+  }
+
+  openTradePlan(signal: any): void {
+    this.selectedSignal = signal;
+  }
+
+  closeTradePlan(): void {
+    this.selectedSignal = null;
+  }
+
+  getRiskPct(signal: any): number {
+    if (!signal || !signal.risk_per_share || !signal.entry_price_est) return 0;
+    return (Number(signal.risk_per_share) / Number(signal.entry_price_est)) * 100;
+  }
+
+  formatPrice(price: any, symbol: string): string {
+    if (price === undefined || price === null || isNaN(Number(price))) return '-';
+    const p = Number(price);
+    const isCryptoOrFutures = symbol.includes('1!') || symbol.includes('BTC') || symbol.includes('GC') || symbol.includes('SI') || symbol.includes('CL') || symbol.includes('USOIL') || p < 5.0;
+    if (isCryptoOrFutures) {
+      if (p === 0) return '0.00';
+      if (p < 0.1) return p.toFixed(5);
+      if (p < 2.0) return p.toFixed(4);
+      return p.toString();
+    }
+    return p.toFixed(2);
   }
 
   ngOnDestroy(): void {

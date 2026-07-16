@@ -212,7 +212,114 @@ exports.handler = async (event, context) => {
         const move_from_day_low_pct = day_low !== 0 ? ((price - day_low) / day_low) * 100 : 0.0;
         const move_from_premarket_high_pct = item.premarket_high ? ((price - item.premarket_high) / item.premarket_high) * 100 : null;
         const move_from_premarket_low_pct = item.premarket_low ? ((price - item.premarket_low) / item.premarket_low) * 100 : null;
-        
+
+        // Trade plan fields parsing & calculations
+        const recent_swing_high = item.sw_high !== undefined && item.sw_high !== null ? Number(item.sw_high) : null;
+        const recent_swing_low = item.sw_low !== undefined && item.sw_low !== null ? Number(item.sw_low) : null;
+        const signal_candle_high = item.sig_high !== undefined && item.sig_high !== null ? Number(item.sig_high) : null;
+        const signal_candle_low = item.sig_low !== undefined && item.sig_low !== null ? Number(item.sig_low) : null;
+        const alphatrend_at_signal = item.at_val !== undefined && item.at_val !== null ? Number(item.at_val) : null;
+        const atr = item.atr !== undefined && item.atr !== null ? Number(item.atr) : null;
+
+        const trigger_price = item.trigger_price || price;
+        const entry_type = "signal_entry";
+        const entry_price_est = trigger_price;
+        const atr_stop_buffer = 0.25;
+
+        let stop_price = null;
+        let risk_per_share = null;
+        let target1_price = null;
+        let target2_price = null;
+        let target3_price = null;
+        let close_price_est = null;
+        let trade_plan_quality = "invalid";
+        let trade_plan_reason = "";
+        let invalidation_reason = "";
+
+        if (direction === 'bullish') {
+          const supportCandidates = [];
+          if (signal_candle_low !== null && !isNaN(signal_candle_low)) supportCandidates.push(signal_candle_low);
+          if (recent_swing_low !== null && !isNaN(recent_swing_low)) supportCandidates.push(recent_swing_low);
+          if (alphatrend_at_signal !== null && !isNaN(alphatrend_at_signal)) supportCandidates.push(alphatrend_at_signal);
+
+          if (supportCandidates.length > 0) {
+            const recent_support = Math.min(...supportCandidates);
+            if (atr !== null && !isNaN(atr)) {
+              stop_price = recent_support - (atr_stop_buffer * atr);
+              risk_per_share = entry_price_est - stop_price;
+              
+              if (risk_per_share > 0) {
+                target1_price = entry_price_est + (1.0 * risk_per_share);
+                target2_price = entry_price_est + (2.0 * risk_per_share);
+                target3_price = entry_price_est + (3.0 * risk_per_share);
+                close_price_est = target2_price;
+                
+                const risk_pct = (risk_per_share / entry_price_est) * 100;
+                if (risk_pct > 2.0) {
+                  trade_plan_quality = "wide_risk";
+                  trade_plan_reason = "Stop is more than 2% away from entry";
+                } else {
+                  trade_plan_quality = "valid";
+                  trade_plan_reason = "";
+                }
+              } else {
+                trade_plan_quality = "invalid";
+                trade_plan_reason = "Invalid bullish risk calculation";
+                invalidation_reason = "Stop is not below entry";
+              }
+            } else {
+              trade_plan_quality = "invalid";
+              trade_plan_reason = "Missing ATR data for stop buffer";
+            }
+          } else {
+            trade_plan_quality = "invalid";
+            trade_plan_reason = "Missing support candidates for stop placement";
+          }
+        } else if (direction === 'bearish') {
+          const resistanceCandidates = [];
+          if (signal_candle_high !== null && !isNaN(signal_candle_high)) resistanceCandidates.push(signal_candle_high);
+          if (recent_swing_high !== null && !isNaN(recent_swing_high)) resistanceCandidates.push(recent_swing_high);
+          if (alphatrend_at_signal !== null && !isNaN(alphatrend_at_signal)) resistanceCandidates.push(alphatrend_at_signal);
+
+          if (resistanceCandidates.length > 0) {
+            const recent_resistance = Math.max(...resistanceCandidates);
+            if (atr !== null && !isNaN(atr)) {
+              stop_price = recent_resistance + (atr_stop_buffer * atr);
+              risk_per_share = stop_price - entry_price_est;
+
+              if (risk_per_share > 0) {
+                target1_price = entry_price_est - (1.0 * risk_per_share);
+                target2_price = entry_price_est - (2.0 * risk_per_share);
+                target3_price = entry_price_est - (3.0 * risk_per_share);
+                close_price_est = target2_price;
+
+                const risk_pct = (risk_per_share / entry_price_est) * 100;
+                if (risk_pct > 2.0) {
+                  trade_plan_quality = "wide_risk";
+                  trade_plan_reason = "Stop is more than 2% away from entry";
+                } else {
+                  trade_plan_quality = "valid";
+                  trade_plan_reason = "";
+                }
+              } else {
+                trade_plan_quality = "invalid";
+                trade_plan_reason = "Invalid bearish risk calculation";
+                invalidation_reason = "Stop is not above entry";
+              }
+            } else {
+              trade_plan_quality = "invalid";
+              trade_plan_reason = "Missing ATR data for stop buffer";
+            }
+          } else {
+            trade_plan_quality = "invalid";
+            trade_plan_reason = "Missing resistance candidates for stop placement";
+          }
+        }
+
+        const reward_to_risk_t1 = 1.0;
+        const reward_to_risk_t2 = 2.0;
+        const reward_to_risk_t3 = 3.0;
+
         // Mark as stale if delay is >= 120 minutes (2 hours)
         let status = score < 50 ? 'rejected' : 'fresh';
         const ageMs = Date.now() - new Date(signal_bar_time).getTime();
@@ -230,13 +337,13 @@ exports.handler = async (event, context) => {
           signal_mode: item.mode || 'confirmed',
           signal_bar_time,
           alert_received_at: new Date().toISOString(),
-          trigger_price: item.trigger_price || price,
+          trigger_price,
           current_price: price,
           current_price_updated_at: new Date().toISOString(),
           vwap_at_signal: item.vwap,
           ema9_at_signal: item.ema9,
           ema21_at_signal: item.ema21,
-          atr_at_signal: item.atr,
+          atr_at_signal: atr,
           volume_at_signal: item.volume,
           relative_volume_at_signal: item.rvol,
           day_high_at_signal: item.day_high,
@@ -263,7 +370,30 @@ exports.handler = async (event, context) => {
           max_adverse_move: 0.0,
           raw_alert_payload: item,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          
+          // Storing trade plan details
+          entry_type,
+          entry_price_est,
+          entry_zone_low: direction === 'bullish' ? entry_price_est * 0.998 : entry_price_est * 0.997,
+          entry_zone_high: direction === 'bullish' ? entry_price_est * 1.003 : entry_price_est * 1.002,
+          stop_price,
+          target1_price,
+          target2_price,
+          target3_price,
+          close_price_est,
+          risk_per_share,
+          reward_to_risk_t1,
+          reward_to_risk_t2,
+          reward_to_risk_t3,
+          trade_plan_quality,
+          trade_plan_reason,
+          invalidation_reason,
+          recent_swing_high,
+          recent_swing_low,
+          signal_candle_high,
+          signal_candle_low,
+          alphatrend_at_signal
         });
       }
     };
@@ -391,6 +521,28 @@ exports.handler = async (event, context) => {
             trigger_price: existing.trigger_price, // Preserve original trigger price
             created_at: existing.created_at,       // Preserve original created_at
             signal_bar_time: existing.signal_bar_time, // Preserve original bar time
+            atr_at_signal: existing.atr_at_signal,
+            recent_swing_high: existing.recent_swing_high,
+            recent_swing_low: existing.recent_swing_low,
+            signal_candle_high: existing.signal_candle_high,
+            signal_candle_low: existing.signal_candle_low,
+            alphatrend_at_signal: existing.alphatrend_at_signal,
+            entry_type: existing.entry_type,
+            entry_price_est: existing.entry_price_est,
+            entry_zone_low: existing.entry_zone_low,
+            entry_zone_high: existing.entry_zone_high,
+            stop_price: existing.stop_price,
+            target1_price: existing.target1_price,
+            target2_price: existing.target2_price,
+            target3_price: existing.target3_price,
+            close_price_est: existing.close_price_est,
+            risk_per_share: existing.risk_per_share,
+            reward_to_risk_t1: existing.reward_to_risk_t1,
+            reward_to_risk_t2: existing.reward_to_risk_t2,
+            reward_to_risk_t3: existing.reward_to_risk_t3,
+            trade_plan_quality: existing.trade_plan_quality,
+            trade_plan_reason: existing.trade_plan_reason,
+            invalidation_reason: existing.invalidation_reason,
             current_price_updated_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           };
@@ -462,3 +614,5 @@ exports.handler = async (event, context) => {
     };
   }
 };
+
+module.exports = { calculateScoreAndReasons };
