@@ -29,10 +29,10 @@ import { SupabaseService } from '../../services/supabase.service';
         </div>
       </div>
 
-      <!-- Advanced Filter Panel (Compact inline) -->
+      <!-- Advanced Filter Panel (Matte style) -->
       <div class="filter-panel">
         <div class="search-box">
-          <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="applyFilters()" placeholder="Search symbols..." class="search-input" />
+          <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="applyFilters()" placeholder="Search symbols, grades, reasons..." class="search-input" />
         </div>
         <div class="filters-row">
           <div class="filter-group">
@@ -83,25 +83,25 @@ import { SupabaseService } from '../../services/supabase.service';
               <thead>
                 <tr>
                   <th (click)="toggleSort('symbol')" class="sortable-th">Symbol <span *ngIf="sortKey === 'symbol'">{{ sortAsc ? '▲' : '▼' }}</span></th>
-                  <th (click)="toggleSort('signal_mode')" class="sortable-th">Mode <span *ngIf="sortKey === 'signal_mode'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('signal_mode')" class="sortable-th" style="text-align: center;">M <span *ngIf="sortKey === 'signal_mode'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('signal_score')" class="sortable-th">Score <span *ngIf="sortKey === 'signal_score'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('trigger_price')" class="sortable-th">Trigger <span *ngIf="sortKey === 'trigger_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('current_price')" class="sortable-th">Current <span *ngIf="sortKey === 'current_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('move_pct')" class="sortable-th">Move % <span *ngIf="sortKey === 'move_pct'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('signal_bar_time')" class="sortable-th">Time <span *ngIf="sortKey === 'signal_bar_time'">{{ sortAsc ? '▲' : '▼' }}</span></th>
-                  <th (click)="toggleSort('status')" class="sortable-th">Status <span *ngIf="sortKey === 'status'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('status')" class="sortable-th" style="text-align: center;">St <span *ngIf="sortKey === 'status'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th>Reasons</th>
                   <th style="text-align: center;">Links</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let s of filteredBullish" [class.stale-row]="s.status === 'stale' || s.status === 'expired'">
+                <tr *ngFor="let s of filteredBullish" [class.stale-row]="s.status === 'stale' || s.status === 'expired' || s.status === 'duplicate'">
                   <td class="sym-cell">
                     <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="symbol-link">{{ s.symbol }}</a>
                   </td>
-                  <td>
-                    <span class="mode-tag" [class.ew]="s.signal_mode === 'early_warning'">
-                      {{ s.signal_mode === 'early_warning' ? 'EW' : 'Conf' }}
+                  <td style="text-align: center;">
+                    <span class="mode-tag" [class.ew]="s.signal_mode === 'early_warning'" [title]="s.signal_mode === 'early_warning' ? 'Early Warning' : 'Confirmed'">
+                      {{ s.signal_mode === 'early_warning' ? 'E' : 'C' }}
                     </span>
                   </td>
                   <td>
@@ -114,9 +114,9 @@ import { SupabaseService } from '../../services/supabase.service';
                   <td class="pct-col" [class.positive]="getMovePct(s) >= 0" [class.negative]="getMovePct(s) < 0">
                     {{ getMovePct(s) | number: '1.2-2' }}%
                   </td>
-                  <td class="time-col">{{ s.signal_bar_time | date: 'hh:mm:ss a' }}</td>
-                  <td>
-                    <span class="status-lbl" [class]="s.status">{{ s.status | uppercase }}</span>
+                  <td class="time-col">{{ s.signal_bar_time | date: 'MM/dd hh:mm a' }}</td>
+                  <td style="text-align: center;">
+                    <span class="status-lbl" [class]="s.status" [title]="s.status | uppercase">{{ getStatusShortCode(s.status) }}</span>
                   </td>
                   <td class="reasons-cell">
                     <div class="reasons-list">
@@ -149,25 +149,25 @@ import { SupabaseService } from '../../services/supabase.service';
               <thead>
                 <tr>
                   <th (click)="toggleSort('symbol')" class="sortable-th">Symbol <span *ngIf="sortKey === 'symbol'">{{ sortAsc ? '▲' : '▼' }}</span></th>
-                  <th (click)="toggleSort('signal_mode')" class="sortable-th">Mode <span *ngIf="sortKey === 'signal_mode'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('signal_mode')" class="sortable-th" style="text-align: center;">M <span *ngIf="sortKey === 'signal_mode'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('signal_score')" class="sortable-th">Score <span *ngIf="sortKey === 'signal_score'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('trigger_price')" class="sortable-th">Trigger <span *ngIf="sortKey === 'trigger_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('current_price')" class="sortable-th">Current <span *ngIf="sortKey === 'current_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('move_pct')" class="sortable-th">Move % <span *ngIf="sortKey === 'move_pct'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('signal_bar_time')" class="sortable-th">Time <span *ngIf="sortKey === 'signal_bar_time'">{{ sortAsc ? '▲' : '▼' }}</span></th>
-                  <th (click)="toggleSort('status')" class="sortable-th">Status <span *ngIf="sortKey === 'status'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('status')" class="sortable-th" style="text-align: center;">St <span *ngIf="sortKey === 'status'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th>Reasons</th>
                   <th style="text-align: center;">Links</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let s of filteredBearish" [class.stale-row]="s.status === 'stale' || s.status === 'expired'">
+                <tr *ngFor="let s of filteredBearish" [class.stale-row]="s.status === 'stale' || s.status === 'expired' || s.status === 'duplicate'">
                   <td class="sym-cell">
                     <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="symbol-link">{{ s.symbol }}</a>
                   </td>
-                  <td>
-                    <span class="mode-tag" [class.ew]="s.signal_mode === 'early_warning'">
-                      {{ s.signal_mode === 'early_warning' ? 'EW' : 'Conf' }}
+                  <td style="text-align: center;">
+                    <span class="mode-tag" [class.ew]="s.signal_mode === 'early_warning'" [title]="s.signal_mode === 'early_warning' ? 'Early Warning' : 'Confirmed'">
+                      {{ s.signal_mode === 'early_warning' ? 'E' : 'C' }}
                     </span>
                   </td>
                   <td>
@@ -180,9 +180,9 @@ import { SupabaseService } from '../../services/supabase.service';
                   <td class="pct-col" [class.positive]="getMovePct(s) >= 0" [class.negative]="getMovePct(s) < 0">
                     {{ getMovePct(s) | number: '1.2-2' }}%
                   </td>
-                  <td class="time-col">{{ s.signal_bar_time | date: 'hh:mm:ss a' }}</td>
-                  <td>
-                    <span class="status-lbl" [class]="s.status">{{ s.status | uppercase }}</span>
+                  <td class="time-col">{{ s.signal_bar_time | date: 'MM/dd hh:mm a' }}</td>
+                  <td style="text-align: center;">
+                    <span class="status-lbl" [class]="s.status" [title]="s.status | uppercase">{{ getStatusShortCode(s.status) }}</span>
                   </td>
                   <td class="reasons-cell">
                     <div class="reasons-list">
@@ -209,9 +209,12 @@ import { SupabaseService } from '../../services/supabase.service';
     </div>
   `,
   styles: [`
+    /* Eye-friendly Matte Charcoal Design System */
     .screener-container {
       padding: 12px 18px;
-      color: #fff;
+      color: #d1d5db; /* Warm soft gray text */
+      background-color: #0f1115; /* Matte near-black background */
+      min-height: 100vh;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     .screener-header {
@@ -222,42 +225,43 @@ import { SupabaseService } from '../../services/supabase.service';
     }
     h2 {
       margin: 0;
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       font-weight: 500;
-      color: #fff;
+      color: #e5e7eb;
     }
     .manual-refresh-btn {
-      background: #2a2e39;
-      color: #fff;
-      border: 1px solid #363c4e;
+      background: #1a1e27;
+      color: #e5e7eb;
+      border: 1px solid #27272a;
       padding: 3px 8px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
+      transition: background-color 0.2s ease;
     }
     .manual-refresh-btn:hover {
-      background: #363c4e;
+      background: #22252a;
     }
     .refresh-indicator {
-      font-size: 0.75rem;
-      color: #888;
-      background: #1e222d;
+      font-size: 0.72rem;
+      color: #6b7280;
+      background: #161a22;
       padding: 3px 8px;
       border-radius: 4px;
-      border: 1px solid #2a2e39;
+      border: 1px solid #27272a;
     }
     .refresh-indicator.syncing {
-      color: #00ff88;
-      border-color: #00ff88;
+      color: #4ade80;
+      border-color: rgba(74, 222, 128, 0.4);
     }
     
-    /* Compact Filter Panel */
+    /* Matte Filter Panel */
     .filter-panel {
-      background: #1c2030;
+      background: #161a22;
       border-radius: 6px;
-      border: 1px solid #2a2e39;
+      border: 1px solid #22252a;
       padding: 10px 14px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -267,17 +271,18 @@ import { SupabaseService } from '../../services/supabase.service';
     }
     .search-input {
       width: 100%;
-      background: #131722;
-      border: 1px solid #2a2e39;
+      background: #0f1115;
+      border: 1px solid #27272a;
       border-radius: 4px;
       padding: 6px 10px;
-      color: #fff;
-      font-size: 0.85rem;
+      color: #e5e7eb;
+      font-size: 0.82rem;
       box-sizing: border-box;
+      transition: border-color 0.2s ease;
     }
     .search-input:focus {
       outline: none;
-      border-color: #2962ff;
+      border-color: #3b82f6;
     }
     .filters-row {
       display: flex;
@@ -292,23 +297,24 @@ import { SupabaseService } from '../../services/supabase.service';
       gap: 12px;
     }
     .group-label {
-      color: #888;
-      font-size: 0.8rem;
+      color: #6b7280;
+      font-size: 0.75rem;
       font-weight: 500;
     }
     .checkbox-label {
-      font-size: 0.8rem;
-      color: #ddd;
+      font-size: 0.78rem;
+      color: #9ca3af;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 4px;
+      user-select: none;
     }
     .toggles .checkbox-label {
-      background: #131722;
+      background: #0f1115;
       padding: 2px 6px;
       border-radius: 4px;
-      border: 1px solid #2a2e39;
+      border: 1px solid #27272a;
     }
 
     .spinner-container {
@@ -316,47 +322,48 @@ import { SupabaseService } from '../../services/supabase.service';
       flex-direction: column;
       align-items: center;
       padding: 30px 0;
-      color: #888;
+      color: #6b7280;
     }
     .spinner-container p {
       margin-top: 8px;
-      font-size: 0.85rem;
+      font-size: 0.8rem;
     }
     .no-data {
       padding: 30px;
       text-align: center;
-      background: #1c2030;
+      background: #161a22;
       border-radius: 6px;
-      color: #888;
-      border: 1px solid #2a2e39;
-      font-size: 0.85rem;
+      color: #6b7280;
+      border: 1px solid #22252a;
+      font-size: 0.8rem;
     }
 
     /* Side-by-Side Tables Layout */
     .tables-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
+      gap: 14px;
     }
     .table-wrapper {
-      background: #131722;
+      background: #161a22;
       border-radius: 6px;
-      border: 1px solid #2a2e39;
+      border: 1px solid #22252a;
       overflow: hidden;
     }
     .table-title {
       padding: 8px 12px;
-      font-weight: bold;
-      font-size: 0.85rem;
-      border-bottom: 1px solid #2a2e39;
+      font-weight: 500;
+      font-size: 0.8rem;
+      border-bottom: 1px solid #22252a;
+      letter-spacing: 0.5px;
     }
     .bullish-title {
-      background: rgba(13, 44, 29, 0.4);
-      color: #00ff88;
+      background: rgba(74, 222, 128, 0.08);
+      color: #4ade80; /* Pastel mint green */
     }
     .bearish-title {
-      background: rgba(59, 18, 18, 0.4);
-      color: #ff4a4a;
+      background: rgba(248, 113, 113, 0.08);
+      color: #f87171; /* Pastel rose red */
     }
     .table-scroll {
       overflow-x: auto;
@@ -366,18 +373,19 @@ import { SupabaseService } from '../../services/supabase.service';
     .screener-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       text-align: left;
     }
     .screener-table th {
-      background: #1c2030;
-      color: #888;
+      background: #1a1e27;
+      color: #9ca3af;
       font-weight: 500;
       padding: 6px 8px;
-      border-bottom: 1px solid #2a2e39;
+      border-bottom: 1px solid #22252a;
       white-space: nowrap;
       text-transform: uppercase;
-      font-size: 0.7rem;
+      font-size: 0.68rem;
+      letter-spacing: 0.2px;
     }
     .sortable-th {
       cursor: pointer;
@@ -385,23 +393,23 @@ import { SupabaseService } from '../../services/supabase.service';
     }
     .sortable-th:hover {
       color: #fff;
-      background: #2a2e39;
+      background: #22252a;
     }
     .screener-table td {
       padding: 6px 8px;
-      border-bottom: 1px solid #1e222d;
+      border-bottom: 1px solid #1a1e27;
       white-space: nowrap;
       vertical-align: middle;
     }
     .screener-table tr:hover {
-      background: rgba(255, 255, 255, 0.02);
+      background: rgba(255, 255, 255, 0.015);
     }
     .stale-row {
-      opacity: 0.55;
+      opacity: 0.45;
     }
     .empty-row {
       text-align: center;
-      color: #666;
+      color: #4b5563;
       padding: 16px !important;
       font-style: italic;
     }
@@ -411,115 +419,126 @@ import { SupabaseService } from '../../services/supabase.service';
       font-weight: bold;
     }
     .symbol-link {
-      color: #fff;
+      color: #e5e7eb;
       text-decoration: none;
+      border-bottom: 1px dashed rgba(255,255,255,0.15);
     }
     .symbol-link:hover {
-      color: #2962ff;
-      text-decoration: underline;
+      color: #3b82f6;
+      border-bottom-color: #3b82f6;
     }
     
     .mode-tag {
       font-size: 0.6rem;
       font-weight: bold;
-      background: #2962ff;
-      color: #fff;
-      padding: 1px 4px;
+      background: #2563eb;
+      color: #e0f2fe;
+      padding: 1px 5px;
       border-radius: 3px;
     }
     .mode-tag.ew {
-      background: #e65100;
+      background: #d97706; /* Soft gold */
     }
 
     .grade-text {
       font-weight: bold;
     }
     .quality-a {
-      color: #00ff88;
+      color: #4ade80;
     }
     .quality-b {
-      color: #29b6f6;
+      color: #60a5fa;
     }
     .quality-c {
-      color: #ffca28;
+      color: #fbbf24;
     }
     .quality-reject {
-      color: #ff4a4a;
+      color: #f87171;
     }
 
     .price-col {
       font-family: monospace;
-      color: #ddd;
+      color: #d1d5db;
     }
     .pct-col {
       font-family: monospace;
       font-weight: bold;
     }
     .pct-col.positive {
-      color: #00ff88;
+      color: #4ade80;
     }
     .pct-col.negative {
-      color: #ff4a4a;
+      color: #f87171;
     }
     .time-col {
       font-family: monospace;
-      color: #888;
+      color: #9ca3af;
     }
 
+    /* Status Badges */
     .status-lbl {
-      font-size: 0.6rem;
+      font-size: 0.62rem;
       font-weight: bold;
       padding: 1px 4px;
       border-radius: 3px;
-      background: #2a2e39;
-      color: #ccc;
+      background: #27272a;
+      color: #a1a1aa;
     }
     .status-lbl.fresh {
-      color: #00ff88;
-      background: rgba(13, 44, 29, 0.3);
+      color: #4ade80;
+      background: rgba(74, 222, 128, 0.08);
+      border: 1px solid rgba(74, 222, 128, 0.2);
     }
     .status-lbl.watch {
-      color: #29b6f6;
-      background: rgba(41, 182, 246, 0.1);
+      color: #60a5fa;
+      background: rgba(96, 165, 250, 0.08);
+      border: 1px solid rgba(96, 165, 250, 0.2);
     }
     .status-lbl.stale {
-      color: #aaa;
+      color: #9ca3af;
+      background: rgba(156, 163, 175, 0.06);
     }
     .status-lbl.expired {
-      color: #666;
+      color: #4b5563;
+      background: transparent;
+    }
+    .status-lbl.duplicate {
+      color: #fbbf24;
+      background: rgba(251, 191, 36, 0.05);
     }
     .status-lbl.conflict {
-      color: #ff4a4a;
-      background: rgba(255, 74, 74, 0.15);
+      color: #f87171;
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.2);
     }
 
-    /* Modern Colored Reasons Pill Badges */
+    /* Modern Muted Reason Pills */
     .reasons-cell {
-      max-width: 220px;
+      max-width: 200px;
       overflow-x: auto;
     }
     .reasons-list {
       display: flex;
-      gap: 4px;
+      gap: 3px;
       flex-wrap: wrap;
     }
     .reason-pill {
-      font-size: 0.6rem;
-      font-weight: bold;
-      background: rgba(0, 255, 136, 0.1);
-      color: #00ff88;
-      border: 1px solid rgba(0, 255, 136, 0.25);
+      font-size: 0.58rem;
+      font-weight: 500;
+      background: rgba(96, 165, 250, 0.06);
+      color: #93c5fd; /* Soft blue */
+      border: 1px solid rgba(96, 165, 250, 0.15);
       padding: 1px 4px;
       border-radius: 3px;
       white-space: nowrap;
     }
     .reason-pill.penalty-pill {
-      background: rgba(255, 74, 74, 0.1);
-      color: #ff4a4a;
-      border: 1px solid rgba(255, 74, 74, 0.25);
+      background: rgba(248, 113, 113, 0.04);
+      color: #fca5a5; /* Soft rose */
+      border: 1px solid rgba(248, 113, 113, 0.12);
     }
     .no-reasons {
-      color: #555;
+      color: #4b5563;
     }
 
     .actions-cell {
@@ -528,22 +547,24 @@ import { SupabaseService } from '../../services/supabase.service';
       justify-content: center;
     }
     .mini-btn {
-      font-size: 0.6rem;
+      font-size: 0.58rem;
       font-weight: 500;
-      color: #fff;
+      color: #d1d5db;
       text-decoration: none;
       padding: 2px 4px;
       border-radius: 3px;
-      transition: opacity 0.2s ease;
+      transition: background-color 0.2s ease;
+      background: #27272a;
+      border: 1px solid #3f3f46;
     }
     .mini-btn:hover {
-      opacity: 0.8;
+      background: #3f3f46;
     }
     .mini-btn.tv {
-      background: #2962ff;
+      color: #93c5fd;
     }
     .mini-btn.fz {
-      background: #388e3c;
+      color: #86efac;
     }
 
     @media (max-width: 1024px) {
@@ -562,8 +583,8 @@ export class Screener implements OnInit, OnDestroy {
   totalBearish = 0;
   loading = true;
 
-  // Sorting
-  sortKey = 'signal_score';
+  // Sorting: Default to time bar descending (latest first)
+  sortKey = 'signal_bar_time';
   sortAsc = false;
 
   // Filters
@@ -627,17 +648,38 @@ export class Screener implements OnInit, OnDestroy {
     return r.includes('penalty') || r.includes('chop') || r.includes('extended') || r.includes('low volume');
   }
 
+  getStatusShortCode(status: string): string {
+    switch (status?.toLowerCase()) {
+      case 'fresh': return 'F';
+      case 'watch': return 'W';
+      case 'stale': return 'S';
+      case 'expired': return 'X';
+      case 'rejected': return 'R';
+      case 'duplicate': return 'D';
+      case 'conflict': return 'C';
+      default: return status ? status[0].toUpperCase() : '-';
+    }
+  }
+
   applyFilters(): void {
     let filtered = this.allSetups;
 
-    // Search filter (symbol, quality, status)
+    // Advanced search filter (checks symbol, grade, quality, reasons, mode, status)
     if (this.searchQuery) {
       const q = this.searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(s => 
-        s.symbol.toLowerCase().includes(q) ||
-        s.signal_quality.toLowerCase().includes(q) ||
-        s.status.toLowerCase().includes(q)
-      );
+      filtered = filtered.filter(s => {
+        const symbolMatch = s.symbol.toLowerCase().includes(q);
+        const qualityMatch = s.signal_quality.toLowerCase().includes(q);
+        const statusMatch = s.status.toLowerCase().includes(q);
+        const modeMatch = s.signal_mode.toLowerCase().includes(q);
+        const reasonsMatch = s.score_reasons?.some((r: string) => r.toLowerCase().includes(q)) || false;
+        
+        // Single letter codes matches
+        const statusLetterMatch = q.length === 1 && this.getStatusShortCode(s.status).toLowerCase() === q;
+        const modeLetterMatch = q.length === 1 && (s.signal_mode === 'early_warning' ? 'e' : 'c') === q;
+        
+        return symbolMatch || qualityMatch || statusMatch || modeMatch || reasonsMatch || statusLetterMatch || modeLetterMatch;
+      });
     }
 
     // Quality filter
