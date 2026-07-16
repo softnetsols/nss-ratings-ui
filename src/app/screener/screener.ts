@@ -452,7 +452,8 @@ import { SupabaseService } from '../../services/supabase.service';
     .quality-c {
       color: #fbbf24;
     }
-    .quality-reject {
+    .quality-reject,
+    .quality-r {
       color: #f87171;
     }
 
@@ -687,7 +688,7 @@ export class Screener implements OnInit, OnDestroy {
       if (s.signal_quality === 'A' && !this.filterQualityA) return false;
       if (s.signal_quality === 'B' && !this.filterQualityB) return false;
       if (s.signal_quality === 'C' && !this.filterQualityC) return false;
-      if (s.signal_quality === 'Reject' && !this.showRejected) return false;
+      if ((s.signal_quality === 'R' || s.signal_quality === 'Reject') && !this.showRejected) return false;
       return true;
     });
 

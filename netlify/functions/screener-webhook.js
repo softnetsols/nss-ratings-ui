@@ -197,7 +197,7 @@ exports.handler = async (event, context) => {
 
         // Scoring
         const { score, reasons } = calculateScoreAndReasons(item, direction);
-        const quality = score >= 80 ? 'A' : (score >= 65 ? 'B' : (score >= 50 ? 'C' : 'Reject'));
+        const quality = score >= 80 ? 'A' : (score >= 65 ? 'B' : (score >= 50 ? 'C' : 'R'));
 
         // Calculations
         const price = Number(item.price) || 0.0;
