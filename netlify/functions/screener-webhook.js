@@ -369,84 +369,83 @@ exports.handler = async (event, context) => {
 
       // Check which rows already exist in the database (to prevent trigger price updates)
       const signalIds = rows.map(r => r.signal_id);
-      const { data: recordsInDb } = await supabase
+      const { data: recordsInDb, error: dbQueryError } = await supabase
         .from('screener_signals')
-        .select('signal_id')
+        .select('*')
         .in('signal_id', signalIds);
 
-      const dbSignalIds = new Set((recordsInDb || []).map(r => r.signal_id));
+      if (dbQueryError) {
+        console.error('Error fetching records from DB:', dbQueryError);
+      }
 
-      const inserts = [];
-      const updates = [];
+      const dbRecordsMap = new Map((recordsInDb || []).map(r => [r.signal_id, r]));
+      const upsertRows = new Map();
 
+      // 1. Process active updates/inserts
       for (const row of rows) {
-        if (dbSignalIds.has(row.signal_id)) {
-          updates.push(row);
+        const existing = dbRecordsMap.get(row.signal_id);
+        if (existing) {
+          // Merge dynamic update fields but preserve original immutable values
+          const mergedRow = {
+            ...row,
+            trigger_price: existing.trigger_price, // Preserve original trigger price
+            created_at: existing.created_at,       // Preserve original created_at
+            signal_bar_time: existing.signal_bar_time, // Preserve original bar time
+            current_price_updated_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          upsertRows.set(row.signal_id, mergedRow);
         } else {
-          inserts.push(row);
+          // New row to insert
+          upsertRows.set(row.signal_id, {
+            ...row,
+            current_price_updated_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
         }
       }
 
-      // Collect all execution tasks for concurrent resolution
-      const dbTasks = [];
-
-      if (inserts.length > 0) {
-        dbTasks.push(
-          supabase
-            .from('screener_signals')
-            .insert(inserts)
-        );
-      }
-
-      // Queue updates concurrently
-      for (const updateRow of updates) {
-        dbTasks.push(
-          supabase
-            .from('screener_signals')
-            .update({
-              current_price: updateRow.current_price,
-              current_price_updated_at: new Date().toISOString(),
-              status: updateRow.status,
-              signal_score: updateRow.signal_score,
-              signal_quality: updateRow.signal_quality,
-              score_reasons: updateRow.score_reasons,
-              updated_at: new Date().toISOString()
-            })
-            .eq('signal_id', updateRow.signal_id)
-        );
-      }
-
-      // Queue auxiliary updates from duplicate/conflict checks concurrently
+      // 2. Process auxiliary updates from duplicate/conflict checks
       for (const aux of auxiliaryUpdates) {
-        dbTasks.push(
-          supabase
-            .from('screener_signals')
-            .update(aux.data)
-            .eq('signal_id', aux.signal_id)
-        );
+        const existing = activeSignals.find(s => s.signal_id === aux.signal_id);
+        if (existing) {
+          // Merge with any values already staged in this batch, or fall back to DB values
+          const currentVal = upsertRows.get(aux.signal_id) || existing;
+          const updatedRecord = {
+            ...currentVal,
+            ...aux.data,
+            updated_at: new Date().toISOString()
+          };
+          upsertRows.set(aux.signal_id, updatedRecord);
+        }
       }
 
-      // Execute all inserts, updates, and auxiliary updates in parallel
-      if (dbTasks.length > 0) {
-        const results = await Promise.all(dbTasks);
-        for (const res of results) {
-          if (res.error) {
-            console.error('Database execution error:', res.error);
-          }
+      // 3. Execute single bulk upsert query
+      if (upsertRows.size > 0) {
+        const { error: upsertError } = await supabase
+          .from('screener_signals')
+          .upsert(Array.from(upsertRows.values()), { onConflict: 'signal_id' });
+
+        if (upsertError) {
+          console.error('Unified bulk upsert error:', upsertError);
         }
       }
     }
 
     // Clean up database signals that are older than 1 week (7 days)
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const { error: cleanupError } = await supabase
-      .from('screener_signals')
-      .delete()
-      .lt('updated_at', oneWeekAgo.toISOString());
-
-    if (cleanupError) {
-      console.warn('Warning: Failed to clean up 1-week old signals:', cleanupError.message);
+    // Run cleanup only 2% of the time to avoid database locks under heavy concurrent webhook payloads
+    if (Math.random() < 0.02) {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      supabase
+        .from('screener_signals')
+        .delete()
+        .lt('updated_at', oneWeekAgo.toISOString())
+        .then(({ error }) => {
+          if (error) {
+            console.warn('Background cleanup warning:', error.message);
+          }
+        });
     }
 
     return {
