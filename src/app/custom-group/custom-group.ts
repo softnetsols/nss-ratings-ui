@@ -76,7 +76,7 @@ import { SupabaseService } from '../../services/supabase.service';
         <!-- Bullish Table -->
         <div class="table-wrapper bullish-wrapper">
           <div class="table-title bullish-title">
-            🟢 BULLISH SETUPS ({{ filteredBullish.length }} of {{ totalBullish }})
+            🟢 BULLISH SETUPS ({{ totalBullish }} active)
           </div>
           <div class="table-scroll">
             <table class="screener-table">
@@ -137,12 +137,18 @@ import { SupabaseService } from '../../services/supabase.service';
               </tbody>
             </table>
           </div>
+          <!-- Pagination Control -->
+          <div class="pagination-bar" *ngIf="totalBullishPages > 1">
+            <button class="pag-btn" (click)="prevBullishPage()" [disabled]="bullishPage === 1">◀ Prev</button>
+            <span class="pag-info">Page {{ bullishPage }} of {{ totalBullishPages }}</span>
+            <button class="pag-btn" (click)="nextBullishPage()" [disabled]="bullishPage === totalBullishPages">Next ▶</button>
+          </div>
         </div>
 
         <!-- Bearish Table -->
         <div class="table-wrapper bearish-wrapper">
           <div class="table-title bearish-title">
-            🔴 BEARISH SETUPS ({{ filteredBearish.length }} of {{ totalBearish }})
+            🔴 BEARISH SETUPS ({{ totalBearish }} active)
           </div>
           <div class="table-scroll">
             <table class="screener-table">
@@ -202,6 +208,12 @@ import { SupabaseService } from '../../services/supabase.service';
                 </tr>
               </tbody>
             </table>
+          </div>
+          <!-- Pagination Control -->
+          <div class="pagination-bar" *ngIf="totalBearishPages > 1">
+            <button class="pag-btn" (click)="prevBearishPage()" [disabled]="bearishPage === 1">◀ Prev</button>
+            <span class="pag-info">Page {{ bearishPage }} of {{ totalBearishPages }}</span>
+            <button class="pag-btn" (click)="nextBearishPage()" [disabled]="bearishPage === totalBearishPages">Next ▶</button>
           </div>
         </div>
 
@@ -349,6 +361,8 @@ import { SupabaseService } from '../../services/supabase.service';
       border-radius: 6px;
       border: 1px solid #22252a;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
     .table-title {
       padding: 8px 12px;
@@ -568,6 +582,38 @@ import { SupabaseService } from '../../services/supabase.service';
       color: #86efac;
     }
 
+    /* Pagination CSS */
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 12px;
+      background: #1a1e27;
+      border-top: 1px solid #22252a;
+    }
+    .pag-btn {
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      color: #d1d5db;
+      font-size: 0.65rem;
+      padding: 2px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .pag-btn:hover:not([disabled]) {
+      background: #3f3f46;
+      color: #fff;
+    }
+    .pag-btn[disabled] {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .pag-info {
+      font-size: 0.65rem;
+      color: #9ca3af;
+    }
+
     @media (max-width: 1024px) {
       .tables-grid {
         grid-template-columns: 1fr;
@@ -583,6 +629,11 @@ export class CustomGroup implements OnInit, OnDestroy {
   totalBullish = 0;
   totalBearish = 0;
   loading = true;
+
+  // Pagination parameters
+  bullishPage = 1;
+  bearishPage = 1;
+  pageSize = 20;
 
   // Sorting: Default to time bar descending (latest first)
   sortKey = 'signal_bar_time';
@@ -619,7 +670,7 @@ export class CustomGroup implements OnInit, OnDestroy {
         next: (data) => {
           this.allSetups = data.filter(s => s.group_name.startsWith('Custom'));
           
-          this.applyFilters();
+          this.applyFilters(true);
           this.loading = false;
           this.cdr.detectChanges();
         },
@@ -638,7 +689,7 @@ export class CustomGroup implements OnInit, OnDestroy {
       this.sortKey = key;
       this.sortAsc = false;
     }
-    this.applyFilters();
+    this.applyFilters(true);
   }
 
   isPenalty(reason: string): boolean {
@@ -659,7 +710,49 @@ export class CustomGroup implements OnInit, OnDestroy {
     }
   }
 
-  applyFilters(): void {
+  // Getters for Pagination bounds
+  get totalBullishPages(): number {
+    return Math.ceil(this.totalBullish / this.pageSize) || 1;
+  }
+
+  get totalBearishPages(): number {
+    return Math.ceil(this.totalBearish / this.pageSize) || 1;
+  }
+
+  prevBullishPage(): void {
+    if (this.bullishPage > 1) {
+      this.bullishPage--;
+      this.applyFilters(false);
+    }
+  }
+
+  nextBullishPage(): void {
+    if (this.bullishPage < this.totalBullishPages) {
+      this.bullishPage++;
+      this.applyFilters(false);
+    }
+  }
+
+  prevBearishPage(): void {
+    if (this.bearishPage > 1) {
+      this.bearishPage--;
+      this.applyFilters(false);
+    }
+  }
+
+  nextBearishPage(): void {
+    if (this.bearishPage < this.totalBearishPages) {
+      this.bearishPage++;
+      this.applyFilters(false);
+    }
+  }
+
+  applyFilters(resetPages = true): void {
+    if (resetPages) {
+      this.bullishPage = 1;
+      this.bearishPage = 1;
+    }
+
     let filtered = this.allSetups;
 
     // Advanced search filter (checks symbol, grade, quality, reasons, mode, status)
@@ -735,9 +828,12 @@ export class CustomGroup implements OnInit, OnDestroy {
     this.totalBullish = bullishList.length;
     this.totalBearish = bearishList.length;
 
-    // Limit to top 20 rows each
-    this.filteredBullish = bullishList.slice(0, 20);
-    this.filteredBearish = bearishList.slice(0, 20);
+    // Apply Client-Side Pagination Slicing (20 rows per page)
+    const startBull = (this.bullishPage - 1) * this.pageSize;
+    this.filteredBullish = bullishList.slice(startBull, startBull + this.pageSize);
+
+    const startBear = (this.bearishPage - 1) * this.pageSize;
+    this.filteredBearish = bearishList.slice(startBear, startBear + this.pageSize);
   }
 
   getMovePct(card: any): number {
