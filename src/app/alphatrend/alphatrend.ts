@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
-import { CommonModule, DecimalPipe } from '@angular/common';
+import { CommonModule, DecimalPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Subject, takeUntil } from 'rxjs';
@@ -12,6 +12,7 @@ import { SupabaseService } from '../../services/supabase.service';
     CommonModule,
     MatProgressSpinnerModule,
     DecimalPipe,
+    DatePipe,
     FormsModule
   ],
   template: `
@@ -76,14 +77,14 @@ import { SupabaseService } from '../../services/supabase.service';
             <table class="screener-table">
               <thead>
                 <tr>
-                  <th>Symbol</th>
-                  <th>Mode</th>
-                  <th>Score</th>
-                  <th>Trigger</th>
-                  <th>Current</th>
-                  <th>Move %</th>
-                  <th>Age</th>
-                  <th>Status</th>
+                  <th (click)="toggleSort('symbol')" class="sortable-th">Symbol <span *ngIf="sortKey === 'symbol'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('signal_mode')" class="sortable-th">Mode <span *ngIf="sortKey === 'signal_mode'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('signal_score')" class="sortable-th">Score <span *ngIf="sortKey === 'signal_score'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('trigger_price')" class="sortable-th">Trigger <span *ngIf="sortKey === 'trigger_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('current_price')" class="sortable-th">Current <span *ngIf="sortKey === 'current_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('move_pct')" class="sortable-th">Move % <span *ngIf="sortKey === 'move_pct'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('signal_bar_time')" class="sortable-th">Time <span *ngIf="sortKey === 'signal_bar_time'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('status')" class="sortable-th">Status <span *ngIf="sortKey === 'status'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th>Reasons</th>
                   <th style="text-align: center;">Links</th>
                 </tr>
@@ -108,12 +109,17 @@ import { SupabaseService } from '../../services/supabase.service';
                   <td class="pct-col" [class.positive]="getMovePct(s) >= 0" [class.negative]="getMovePct(s) < 0">
                     {{ getMovePct(s) | number: '1.2-2' }}%
                   </td>
-                  <td>{{ getSignalAge(s) }}m</td>
+                  <td class="time-col">{{ s.signal_bar_time | date: 'hh:mm:ss a' }}</td>
                   <td>
                     <span class="status-lbl" [class]="s.status">{{ s.status | uppercase }}</span>
                   </td>
-                  <td class="reasons-cell" [title]="s.score_reasons?.join(', ') || ''">
-                    {{ s.score_reasons?.join(', ') || '-' }}
+                  <td class="reasons-cell">
+                    <div class="reasons-list">
+                      <span *ngFor="let r of s.score_reasons" class="reason-pill" [class.penalty-pill]="isPenalty(r)">
+                        {{ r }}
+                      </span>
+                      <span *ngIf="!s.score_reasons || s.score_reasons.length === 0" class="no-reasons">-</span>
+                    </div>
                   </td>
                   <td class="actions-cell">
                     <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="mini-btn tv" title="TradingView">TV</a>
@@ -137,14 +143,14 @@ import { SupabaseService } from '../../services/supabase.service';
             <table class="screener-table">
               <thead>
                 <tr>
-                  <th>Symbol</th>
-                  <th>Mode</th>
-                  <th>Score</th>
-                  <th>Trigger</th>
-                  <th>Current</th>
-                  <th>Move %</th>
-                  <th>Age</th>
-                  <th>Status</th>
+                  <th (click)="toggleSort('symbol')" class="sortable-th">Symbol <span *ngIf="sortKey === 'symbol'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('signal_mode')" class="sortable-th">Mode <span *ngIf="sortKey === 'signal_mode'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('signal_score')" class="sortable-th">Score <span *ngIf="sortKey === 'signal_score'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('trigger_price')" class="sortable-th">Trigger <span *ngIf="sortKey === 'trigger_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('current_price')" class="sortable-th">Current <span *ngIf="sortKey === 'current_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('move_pct')" class="sortable-th">Move % <span *ngIf="sortKey === 'move_pct'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('signal_bar_time')" class="sortable-th">Time <span *ngIf="sortKey === 'signal_bar_time'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th (click)="toggleSort('status')" class="sortable-th">Status <span *ngIf="sortKey === 'status'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th>Reasons</th>
                   <th style="text-align: center;">Links</th>
                 </tr>
@@ -169,12 +175,17 @@ import { SupabaseService } from '../../services/supabase.service';
                   <td class="pct-col" [class.positive]="getMovePct(s) >= 0" [class.negative]="getMovePct(s) < 0">
                     {{ getMovePct(s) | number: '1.2-2' }}%
                   </td>
-                  <td>{{ getSignalAge(s) }}m</td>
+                  <td class="time-col">{{ s.signal_bar_time | date: 'hh:mm:ss a' }}</td>
                   <td>
                     <span class="status-lbl" [class]="s.status">{{ s.status | uppercase }}</span>
                   </td>
-                  <td class="reasons-cell" [title]="s.score_reasons?.join(', ') || ''">
-                    {{ s.score_reasons?.join(', ') || '-' }}
+                  <td class="reasons-cell">
+                    <div class="reasons-list">
+                      <span *ngFor="let r of s.score_reasons" class="reason-pill" [class.penalty-pill]="isPenalty(r)">
+                        {{ r }}
+                      </span>
+                      <span *ngIf="!s.score_reasons || s.score_reasons.length === 0" class="no-reasons">-</span>
+                    </div>
                   </td>
                   <td class="actions-cell">
                     <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="mini-btn tv" title="TradingView">TV</a>
@@ -351,6 +362,14 @@ import { SupabaseService } from '../../services/supabase.service';
       text-transform: uppercase;
       font-size: 0.7rem;
     }
+    .sortable-th {
+      cursor: pointer;
+      user-select: none;
+    }
+    .sortable-th:hover {
+      color: #fff;
+      background: #2a2e39;
+    }
     .screener-table td {
       padding: 6px 8px;
       border-bottom: 1px solid #1e222d;
@@ -425,6 +444,10 @@ import { SupabaseService } from '../../services/supabase.service';
     .pct-col.negative {
       color: #ff4a4a;
     }
+    .time-col {
+      font-family: monospace;
+      color: #888;
+    }
 
     .status-lbl {
       font-size: 0.6rem;
@@ -453,12 +476,33 @@ import { SupabaseService } from '../../services/supabase.service';
       background: rgba(255, 74, 74, 0.15);
     }
 
+    /* Modern Colored Reasons Pill Badges */
     .reasons-cell {
-      max-width: 150px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      color: #888;
-      font-size: 0.7rem;
+      max-width: 220px;
+      overflow-x: auto;
+    }
+    .reasons-list {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .reason-pill {
+      font-size: 0.6rem;
+      font-weight: bold;
+      background: rgba(0, 255, 136, 0.1);
+      color: #00ff88;
+      border: 1px solid rgba(0, 255, 136, 0.25);
+      padding: 1px 4px;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+    .reason-pill.penalty-pill {
+      background: rgba(255, 74, 74, 0.1);
+      color: #ff4a4a;
+      border: 1px solid rgba(255, 74, 74, 0.25);
+    }
+    .no-reasons {
+      color: #555;
     }
 
     .actions-cell {
@@ -500,6 +544,10 @@ export class AlphaTrend implements OnInit, OnDestroy {
   totalBullish = 0;
   totalBearish = 0;
   loading = true;
+
+  // Sorting
+  sortKey = 'signal_score';
+  sortAsc = false;
 
   // Filters
   searchQuery = '';
@@ -553,13 +601,32 @@ export class AlphaTrend implements OnInit, OnDestroy {
       });
   }
 
+  toggleSort(key: string): void {
+    if (this.sortKey === key) {
+      this.sortAsc = !this.sortAsc;
+    } else {
+      this.sortKey = key;
+      this.sortAsc = false;
+    }
+    this.applyFilters();
+  }
+
+  isPenalty(reason: string): boolean {
+    const r = reason.toLowerCase();
+    return r.includes('penalty') || r.includes('chop') || r.includes('extended') || r.includes('low volume');
+  }
+
   applyFilters(): void {
     let filtered = this.allSetups;
 
-    // Search filter
+    // Search filter (symbol, quality, status)
     if (this.searchQuery) {
       const q = this.searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(s => s.symbol.toLowerCase().includes(q));
+      filtered = filtered.filter(s => 
+        s.symbol.toLowerCase().includes(q) ||
+        s.signal_quality.toLowerCase().includes(q) ||
+        s.status.toLowerCase().includes(q)
+      );
     }
 
     // Quality filter
@@ -586,8 +653,29 @@ export class AlphaTrend implements OnInit, OnDestroy {
       filtered = filtered.filter(s => s.status !== 'stale' && s.status !== 'expired');
     }
 
-    // Sort by signal_score descending
-    filtered.sort((a, b) => (b.signal_score || 0) - (a.signal_score || 0));
+    // Dynamic Column Sorting
+    filtered.sort((a, b) => {
+      let valA = a[this.sortKey];
+      let valB = b[this.sortKey];
+
+      // Custom fields resolution
+      if (this.sortKey === 'move_pct') {
+        valA = this.getMovePct(a);
+        valB = this.getMovePct(b);
+      } else if (this.sortKey === 'signal_bar_time') {
+        valA = a.signal_bar_time ? new Date(a.signal_bar_time).getTime() : 0;
+        valB = b.signal_bar_time ? new Date(b.signal_bar_time).getTime() : 0;
+      }
+
+      if (valA == null) return this.sortAsc ? -1 : 1;
+      if (valB == null) return this.sortAsc ? 1 : -1;
+
+      if (typeof valA === 'string') {
+        return this.sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      } else {
+        return this.sortAsc ? valA - valB : valB - valA;
+      }
+    });
 
     // Distribute into Bullish / Bearish
     const bullishList = filtered.filter(s => s.direction === 'bullish');
@@ -609,12 +697,6 @@ export class AlphaTrend implements OnInit, OnDestroy {
     } else {
       return ((trigger - current) / trigger) * 100;
     }
-  }
-
-  getSignalAge(card: any): number {
-    const timeVal = card.signal_bar_time ? new Date(card.signal_bar_time).getTime() : new Date().getTime();
-    const ageMins = Math.round((Date.now() - timeVal) / 60000);
-    return ageMins >= 0 ? ageMins : 0;
   }
 
   ngOnDestroy(): void {

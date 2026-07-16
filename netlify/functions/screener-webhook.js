@@ -290,6 +290,7 @@ exports.handler = async (event, context) => {
       }
 
       const activeSignals = existingSignals || [];
+      const auxiliaryUpdates = [];
 
       // Process duplicate and confirmation checks
       for (const row of rows) {
@@ -304,10 +305,10 @@ exports.handler = async (event, context) => {
 
         if (conflictSignal) {
           row.status = 'conflict';
-          await supabase
-            .from('screener_signals')
-            .update({ status: 'conflict' })
-            .eq('signal_id', conflictSignal.signal_id);
+          auxiliaryUpdates.push({
+            signal_id: conflictSignal.signal_id,
+            data: { status: 'conflict', updated_at: new Date().toISOString() }
+          });
           continue;
         }
 
@@ -341,25 +342,27 @@ exports.handler = async (event, context) => {
             row.confirmation_count = 2;
             row.confirmations = [...new Set([...row.confirmations, confirmationSignal.strategy_name])];
             
-            await supabase
-              .from('screener_signals')
-              .update({ 
+            auxiliaryUpdates.push({
+              signal_id: confirmationSignal.signal_id,
+              data: { 
                 status: 'duplicate', 
-                duplicate_of_signal_id: row.signal_id 
-              })
-              .eq('signal_id', confirmationSignal.signal_id);
+                duplicate_of_signal_id: row.signal_id,
+                updated_at: new Date().toISOString()
+              }
+            });
           } else {
             row.status = 'duplicate';
             row.duplicate_of_signal_id = confirmationSignal.signal_id;
 
             const updatedConfirmations = [...new Set([...(confirmationSignal.confirmations || []), row.strategy_name])];
-            await supabase
-              .from('screener_signals')
-              .update({ 
-                confirmation_count: confirmationSignal.confirmation_count + 1,
-                confirmations: updatedConfirmations
-              })
-              .eq('signal_id', confirmationSignal.signal_id);
+            auxiliaryUpdates.push({
+              signal_id: confirmationSignal.signal_id,
+              data: { 
+                confirmation_count: (Number(confirmationSignal.confirmation_count) || 1) + 1,
+                confirmations: updatedConfirmations,
+                updated_at: new Date().toISOString()
+              }
+            });
           }
         }
       }
@@ -384,36 +387,54 @@ exports.handler = async (event, context) => {
         }
       }
 
+      // Collect all execution tasks for concurrent resolution
+      const dbTasks = [];
+
       if (inserts.length > 0) {
-        const { error: insertError } = await supabase
-          .from('screener_signals')
-          .insert(inserts);
-
-        if (insertError) {
-          console.error('Error inserting signals:', insertError);
-        }
+        dbTasks.push(
+          supabase
+            .from('screener_signals')
+            .insert(inserts)
+        );
       }
 
+      // Queue updates concurrently
       for (const updateRow of updates) {
-        // Perform separate update query for dynamic fields to leave trigger price and timestamps unchanged
-        const { error: updateError } = await supabase
-          .from('screener_signals')
-          .update({
-            current_price: updateRow.current_price,
-            current_price_updated_at: new Date().toISOString(),
-            status: updateRow.status,
-            signal_score: updateRow.signal_score,
-            signal_quality: updateRow.signal_quality,
-            score_reasons: updateRow.score_reasons,
-            updated_at: new Date().toISOString()
-          })
-          .eq('signal_id', updateRow.signal_id);
+        dbTasks.push(
+          supabase
+            .from('screener_signals')
+            .update({
+              current_price: updateRow.current_price,
+              current_price_updated_at: new Date().toISOString(),
+              status: updateRow.status,
+              signal_score: updateRow.signal_score,
+              signal_quality: updateRow.signal_quality,
+              score_reasons: updateRow.score_reasons,
+              updated_at: new Date().toISOString()
+            })
+            .eq('signal_id', updateRow.signal_id)
+        );
+      }
 
-        if (updateError) {
-          console.error('Error updating signal:', updateRow.signal_id, updateError);
+      // Queue auxiliary updates from duplicate/conflict checks concurrently
+      for (const aux of auxiliaryUpdates) {
+        dbTasks.push(
+          supabase
+            .from('screener_signals')
+            .update(aux.data)
+            .eq('signal_id', aux.signal_id)
+        );
+      }
+
+      // Execute all inserts, updates, and auxiliary updates in parallel
+      if (dbTasks.length > 0) {
+        const results = await Promise.all(dbTasks);
+        for (const res of results) {
+          if (res.error) {
+            console.error('Database execution error:', res.error);
+          }
         }
       }
-    }
 
     // Clean up database signals that are older than 1 week (7 days)
     const oneWeekAgo = new Date();
