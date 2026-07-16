@@ -213,10 +213,10 @@ exports.handler = async (event, context) => {
         const move_from_premarket_high_pct = item.premarket_high ? ((price - item.premarket_high) / item.premarket_high) * 100 : null;
         const move_from_premarket_low_pct = item.premarket_low ? ((price - item.premarket_low) / item.premarket_low) * 100 : null;
         
-        // Mark as stale if delay is >= 15 minutes
+        // Mark as stale if delay is >= 120 minutes (2 hours)
         let status = score < 50 ? 'rejected' : 'fresh';
         const ageMs = Date.now() - new Date(signal_bar_time).getTime();
-        if (status === 'fresh' && ageMs >= 15 * 60000) {
+        if (status === 'fresh' && ageMs >= 120 * 60000) {
           status = 'stale';
         }
 

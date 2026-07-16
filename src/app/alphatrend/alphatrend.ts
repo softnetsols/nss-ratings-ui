@@ -576,7 +576,7 @@ export class AlphaTrend implements OnInit, OnDestroy {
   filterQualityC = false;
   showDuplicates = false;
   showRejected = false;
-  showStale = false;
+  showStale = true;
 
   private destroy$ = new Subject<void>();
   private pollInterval: any;
