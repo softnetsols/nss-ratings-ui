@@ -28,7 +28,7 @@ import { SupabaseService } from '../../services/supabase.service';
         </div>
       </div>
 
-      <!-- Advanced Filter Panel -->
+      <!-- Advanced Filter Panel (Compact inline) -->
       <div class="filter-panel">
         <div class="search-box">
           <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="applyFilters()" placeholder="Search symbols..." class="search-input" />
@@ -61,182 +61,136 @@ import { SupabaseService } from '../../services/supabase.service';
       </div>
 
       <div *ngIf="loading && allSetups.length === 0" class="spinner-container">
-        <mat-spinner diameter="40"></mat-spinner>
+        <mat-spinner diameter="35"></mat-spinner>
         <p>Loading active setups...</p>
       </div>
 
       <div *ngIf="!loading && allSetups.length === 0" class="no-data">
-        No active setups found. Make sure your TradingView alerts are active.
+        No active setups found. Make sure your TradingView GoldenCross alerts are active.
       </div>
 
-      <!-- Side-by-Side Symbol Card Columns -->
+      <!-- Side-by-Side Compact Tables -->
       <div *ngIf="allSetups.length > 0" class="tables-grid">
         
-        <!-- Bullish Column -->
-        <div class="column-wrapper bullish-col">
-          <div class="column-header bullish-header">
+        <!-- Bullish Table -->
+        <div class="table-wrapper bullish-wrapper">
+          <div class="table-title bullish-title">
             🟢 BULLISH SETUPS ({{ filteredBullish.length }} of {{ totalBullish }})
           </div>
-          <div class="cards-list">
-            <div *ngFor="let card of filteredBullish" class="symbol-card bullish-card" [class.stale]="card.status === 'stale' || card.status === 'expired'">
-              
-              <!-- Card Top Header -->
-              <div class="card-top">
-                <div class="sym-group">
-                  <a [href]="'https://www.tradingview.com/chart/?symbol=' + card.symbol" target="_blank" class="sym-link">
-                    {{ card.symbol }}
-                  </a>
-                  <span class="mode-badge" [class.ew]="card.signal_mode === 'early_warning'">
-                    {{ card.signal_mode === 'early_warning' ? 'EW' : 'CONFIRMED' }}
-                  </span>
-                </div>
-                <div class="score-badge" [class]="'quality-' + card.signal_quality.toLowerCase()">
-                  Score: {{ card.signal_score }} ({{ card.signal_quality }})
-                </div>
-              </div>
-
-              <!-- Price Move Grid -->
-              <div class="price-grid">
-                <div class="price-item">
-                  <span class="price-lbl">Trigger Price</span>
-                  <span class="price-val">\${{ card.trigger_price | number: '1.2-2' }}</span>
-                </div>
-                <div class="price-item">
-                  <span class="price-lbl">Current Price</span>
-                  <span class="price-val">\${{ card.current_price | number: '1.2-2' }}</span>
-                </div>
-                <div class="price-item performance">
-                  <span class="price-lbl">Move %</span>
-                  <span class="price-val pct-move" [class.positive]="getMovePct(card) >= 0" [class.negative]="getMovePct(card) < 0">
-                    {{ getMovePct(card) | number: '1.2-2' }}%
-                  </span>
-                </div>
-              </div>
-
-              <!-- Age & Lifecycle Status -->
-              <div class="card-details">
-                <div class="detail-row">
-                  <span class="detail-lbl">Age:</span>
-                  <span class="detail-val">{{ getSignalAge(card) }}m ago</span>
-                </div>
-                <div class="detail-row">
-                  <span class="detail-lbl">Status:</span>
-                  <span class="detail-val status-tag" [class]="card.status">
-                    {{ card.status | uppercase }}
-                  </span>
-                </div>
-                <div class="detail-row" *ngIf="card.confirmation_count > 1">
-                  <span class="detail-lbl">Confirmations:</span>
-                  <span class="detail-val conf-tag">
-                    {{ getConfirmationsList(card) }}
-                  </span>
-                </div>
-              </div>
-
-              <!-- Badges reasons -->
-              <div class="reasons-list" *ngIf="card.score_reasons?.length > 0">
-                <span *ngFor="let reason of card.score_reasons" class="reason-badge" [class.penalty]="reason.startsWith('-')">
-                  {{ reason }}
-                </span>
-              </div>
-
-              <!-- Conflict Indicator -->
-              <div class="conflict-banner" *ngIf="card.status === 'conflict'">
-                ⚠️ CONFLICTING DIRECTION DETECTED
-              </div>
-
-              <!-- Card Bottom Actions -->
-              <div class="card-actions">
-                <a [href]="'https://www.tradingview.com/chart/?symbol=' + card.symbol" target="_blank" class="action-btn tv-btn">TradingView</a>
-                <a [href]="'https://finviz.com/quote.ashx?t=' + card.symbol" target="_blank" class="action-btn fz-btn">Finviz</a>
-              </div>
-
-            </div>
-            <div *ngIf="filteredBullish.length === 0" class="empty-list">No bullish setups match active filters.</div>
+          <div class="table-scroll">
+            <table class="screener-table">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Mode</th>
+                  <th>Score</th>
+                  <th>Trigger</th>
+                  <th>Current</th>
+                  <th>Move %</th>
+                  <th>Age</th>
+                  <th>Status</th>
+                  <th>Reasons</th>
+                  <th style="text-align: center;">Links</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let s of filteredBullish" [class.stale-row]="s.status === 'stale' || s.status === 'expired'">
+                  <td class="sym-cell">
+                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="symbol-link">{{ s.symbol }}</a>
+                  </td>
+                  <td>
+                    <span class="mode-tag" [class.ew]="s.signal_mode === 'early_warning'">
+                      {{ s.signal_mode === 'early_warning' ? 'EW' : 'Conf' }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="grade-text" [class]="'quality-' + s.signal_quality.toLowerCase()">
+                      {{ s.signal_score }} ({{ s.signal_quality }})
+                    </span>
+                  </td>
+                  <td class="price-col">\${{ s.trigger_price | number: '1.2-2' }}</td>
+                  <td class="price-col">\${{ s.current_price | number: '1.2-2' }}</td>
+                  <td class="pct-col" [class.positive]="getMovePct(s) >= 0" [class.negative]="getMovePct(s) < 0">
+                    {{ getMovePct(s) | number: '1.2-2' }}%
+                  </td>
+                  <td>{{ getSignalAge(s) }}m</td>
+                  <td>
+                    <span class="status-lbl" [class]="s.status">{{ s.status | uppercase }}</span>
+                  </td>
+                  <td class="reasons-cell" [title]="s.score_reasons?.join(', ') || ''">
+                    {{ s.score_reasons?.join(', ') || '-' }}
+                  </td>
+                  <td class="actions-cell">
+                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="mini-btn tv" title="TradingView">TV</a>
+                    <a [href]="'https://finviz.com/quote.ashx?t=' + s.symbol" target="_blank" class="mini-btn fz" title="Finviz">FZ</a>
+                  </td>
+                </tr>
+                <tr *ngIf="filteredBullish.length === 0">
+                  <td colspan="10" class="empty-row">No bullish setups match active filters.</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <!-- Bearish Column -->
-        <div class="column-wrapper bearish-col">
-          <div class="column-header bearish-header">
+        <!-- Bearish Table -->
+        <div class="table-wrapper bearish-wrapper">
+          <div class="table-title bearish-title">
             🔴 BEARISH SETUPS ({{ filteredBearish.length }} of {{ totalBearish }})
           </div>
-          <div class="cards-list">
-            <div *ngFor="let card of filteredBearish" class="symbol-card bearish-card" [class.stale]="card.status === 'stale' || card.status === 'expired'">
-              
-              <!-- Card Top Header -->
-              <div class="card-top">
-                <div class="sym-group">
-                  <a [href]="'https://www.tradingview.com/chart/?symbol=' + card.symbol" target="_blank" class="sym-link">
-                    {{ card.symbol }}
-                  </a>
-                  <span class="mode-badge" [class.ew]="card.signal_mode === 'early_warning'">
-                    {{ card.signal_mode === 'early_warning' ? 'EW' : 'CONFIRMED' }}
-                  </span>
-                </div>
-                <div class="score-badge" [class]="'quality-' + card.signal_quality.toLowerCase()">
-                  Score: {{ card.signal_score }} ({{ card.signal_quality }})
-                </div>
-              </div>
-
-              <!-- Price Move Grid -->
-              <div class="price-grid">
-                <div class="price-item">
-                  <span class="price-lbl">Trigger Price</span>
-                  <span class="price-val">\${{ card.trigger_price | number: '1.2-2' }}</span>
-                </div>
-                <div class="price-item">
-                  <span class="price-lbl">Current Price</span>
-                  <span class="price-val">\${{ card.current_price | number: '1.2-2' }}</span>
-                </div>
-                <div class="price-item performance">
-                  <span class="price-lbl">Move %</span>
-                  <span class="price-val pct-move" [class.positive]="getMovePct(card) >= 0" [class.negative]="getMovePct(card) < 0">
-                    {{ getMovePct(card) | number: '1.2-2' }}%
-                  </span>
-                </div>
-              </div>
-
-              <!-- Age & Lifecycle Status -->
-              <div class="card-details">
-                <div class="detail-row">
-                  <span class="detail-lbl">Age:</span>
-                  <span class="detail-val">{{ getSignalAge(card) }}m ago</span>
-                </div>
-                <div class="detail-row">
-                  <span class="detail-lbl">Status:</span>
-                  <span class="detail-val status-tag" [class]="card.status">
-                    {{ card.status | uppercase }}
-                  </span>
-                </div>
-                <div class="detail-row" *ngIf="card.confirmation_count > 1">
-                  <span class="detail-lbl">Confirmations:</span>
-                  <span class="detail-val conf-tag">
-                    {{ getConfirmationsList(card) }}
-                  </span>
-                </div>
-              </div>
-
-              <!-- Badges reasons -->
-              <div class="reasons-list" *ngIf="card.score_reasons?.length > 0">
-                <span *ngFor="let reason of card.score_reasons" class="reason-badge" [class.penalty]="reason.startsWith('-')">
-                  {{ reason }}
-                </span>
-              </div>
-
-              <!-- Conflict Indicator -->
-              <div class="conflict-banner" *ngIf="card.status === 'conflict'">
-                ⚠️ CONFLICTING DIRECTION DETECTED
-              </div>
-
-              <!-- Card Bottom Actions -->
-              <div class="card-actions">
-                <a [href]="'https://www.tradingview.com/chart/?symbol=' + card.symbol" target="_blank" class="action-btn tv-btn">TradingView</a>
-                <a [href]="'https://finviz.com/quote.ashx?t=' + card.symbol" target="_blank" class="action-btn fz-btn">Finviz</a>
-              </div>
-
-            </div>
-            <div *ngIf="filteredBearish.length === 0" class="empty-list">No bearish setups match active filters.</div>
+          <div class="table-scroll">
+            <table class="screener-table">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Mode</th>
+                  <th>Score</th>
+                  <th>Trigger</th>
+                  <th>Current</th>
+                  <th>Move %</th>
+                  <th>Age</th>
+                  <th>Status</th>
+                  <th>Reasons</th>
+                  <th style="text-align: center;">Links</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let s of filteredBearish" [class.stale-row]="s.status === 'stale' || s.status === 'expired'">
+                  <td class="sym-cell">
+                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="symbol-link">{{ s.symbol }}</a>
+                  </td>
+                  <td>
+                    <span class="mode-tag" [class.ew]="s.signal_mode === 'early_warning'">
+                      {{ s.signal_mode === 'early_warning' ? 'EW' : 'Conf' }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="grade-text" [class]="'quality-' + s.signal_quality.toLowerCase()">
+                      {{ s.signal_score }} ({{ s.signal_quality }})
+                    </span>
+                  </td>
+                  <td class="price-col">\${{ s.trigger_price | number: '1.2-2' }}</td>
+                  <td class="price-col">\${{ s.current_price | number: '1.2-2' }}</td>
+                  <td class="pct-col" [class.positive]="getMovePct(s) >= 0" [class.negative]="getMovePct(s) < 0">
+                    {{ getMovePct(s) | number: '1.2-2' }}%
+                  </td>
+                  <td>{{ getSignalAge(s) }}m</td>
+                  <td>
+                    <span class="status-lbl" [class]="s.status">{{ s.status | uppercase }}</span>
+                  </td>
+                  <td class="reasons-cell" [title]="s.score_reasons?.join(', ') || ''">
+                    {{ s.score_reasons?.join(', ') || '-' }}
+                  </td>
+                  <td class="actions-cell">
+                    <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="mini-btn tv" title="TradingView">TV</a>
+                    <a [href]="'https://finviz.com/quote.ashx?t=' + s.symbol" target="_blank" class="mini-btn fz" title="Finviz">FZ</a>
+                  </td>
+                </tr>
+                <tr *ngIf="filteredBearish.length === 0">
+                  <td colspan="10" class="empty-row">No bearish setups match active filters.</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -245,18 +199,19 @@ import { SupabaseService } from '../../services/supabase.service';
   `,
   styles: [`
     .screener-container {
-      padding: 16px 24px;
+      padding: 12px 18px;
       color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     .screener-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
+      margin-bottom: 12px;
     }
     h2 {
       margin: 0;
-      font-size: 1.5rem;
+      font-size: 1.25rem;
       font-weight: 500;
       color: #fff;
     }
@@ -264,19 +219,19 @@ import { SupabaseService } from '../../services/supabase.service';
       background: #2a2e39;
       color: #fff;
       border: 1px solid #363c4e;
-      padding: 4px 12px;
+      padding: 3px 8px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 0.8rem;
+      font-size: 0.75rem;
     }
     .manual-refresh-btn:hover {
       background: #363c4e;
     }
     .refresh-indicator {
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       color: #888;
       background: #1e222d;
-      padding: 4px 10px;
+      padding: 3px 8px;
       border-radius: 4px;
       border: 1px solid #2a2e39;
     }
@@ -285,25 +240,29 @@ import { SupabaseService } from '../../services/supabase.service';
       border-color: #00ff88;
     }
     
-    /* Advanced Filter Panel */
+    /* Compact Filter Panel */
     .filter-panel {
       background: #1c2030;
-      border-radius: 8px;
+      border-radius: 6px;
       border: 1px solid #2a2e39;
-      padding: 16px;
-      margin-bottom: 24px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
     .search-box {
-      margin-bottom: 12px;
+      width: 100%;
     }
     .search-input {
       width: 100%;
       background: #131722;
       border: 1px solid #2a2e39;
       border-radius: 4px;
-      padding: 8px 12px;
+      padding: 6px 10px;
       color: #fff;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
+      box-sizing: border-box;
     }
     .search-input:focus {
       outline: none;
@@ -312,6 +271,7 @@ import { SupabaseService } from '../../services/supabase.service';
     .filters-row {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       flex-wrap: wrap;
       gap: 12px;
     }
@@ -322,11 +282,11 @@ import { SupabaseService } from '../../services/supabase.service';
     }
     .group-label {
       color: #888;
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       font-weight: 500;
     }
     .checkbox-label {
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       color: #ddd;
       cursor: pointer;
       display: flex;
@@ -335,7 +295,7 @@ import { SupabaseService } from '../../services/supabase.service';
     }
     .toggles .checkbox-label {
       background: #131722;
-      padding: 4px 8px;
+      padding: 2px 6px;
       border-radius: 4px;
       border: 1px solid #2a2e39;
     }
@@ -344,281 +304,208 @@ import { SupabaseService } from '../../services/supabase.service';
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 40px 0;
+      padding: 30px 0;
       color: #888;
     }
     .spinner-container p {
-      margin-top: 12px;
+      margin-top: 8px;
+      font-size: 0.85rem;
     }
     .no-data {
-      padding: 40px;
+      padding: 30px;
       text-align: center;
       background: #1c2030;
-      border-radius: 8px;
+      border-radius: 6px;
       color: #888;
       border: 1px solid #2a2e39;
+      font-size: 0.85rem;
     }
 
-    /* Side-by-Side Card Columns */
+    /* Side-by-Side Tables Layout */
     .tables-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 24px;
+      gap: 16px;
     }
-    .column-wrapper {
+    .table-wrapper {
       background: #131722;
-      border-radius: 8px;
+      border-radius: 6px;
+      border: 1px solid #2a2e39;
       overflow: hidden;
     }
-    .column-header {
-      padding: 12px 16px;
+    .table-title {
+      padding: 8px 12px;
       font-weight: bold;
-      font-size: 0.95rem;
+      font-size: 0.85rem;
       border-bottom: 1px solid #2a2e39;
     }
-    .bullish-header {
-      background: rgba(13, 44, 29, 0.5);
+    .bullish-title {
+      background: rgba(13, 44, 29, 0.4);
       color: #00ff88;
     }
-    .bearish-header {
-      background: rgba(59, 18, 18, 0.5);
+    .bearish-title {
+      background: rgba(59, 18, 18, 0.4);
       color: #ff4a4a;
     }
-    .cards-list {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      padding: 16px;
+    .table-scroll {
+      overflow-x: auto;
     }
 
-    /* Symbol Card styling */
-    .symbol-card {
+    /* Compact Dark Table styling */
+    .screener-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75rem;
+      text-align: left;
+    }
+    .screener-table th {
       background: #1c2030;
-      border-radius: 8px;
-      border: 1px solid #2a2e39;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      color: #888;
+      font-weight: 500;
+      padding: 6px 8px;
+      border-bottom: 1px solid #2a2e39;
+      white-space: nowrap;
+      text-transform: uppercase;
+      font-size: 0.7rem;
     }
-    .symbol-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    .screener-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #1e222d;
+      white-space: nowrap;
+      vertical-align: middle;
     }
-    .bullish-card {
-      border-left: 4px solid #00ff88;
+    .screener-table tr:hover {
+      background: rgba(255, 255, 255, 0.02);
     }
-    .bearish-card {
-      border-left: 4px solid #ff4a4a;
+    .stale-row {
+      opacity: 0.55;
     }
-    .symbol-card.stale {
-      opacity: 0.65;
+    .empty-row {
+      text-align: center;
+      color: #666;
+      padding: 16px !important;
+      font-style: italic;
     }
 
-    /* Card Components */
-    .card-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .sym-group {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .sym-link {
-      color: #fff;
-      text-decoration: none;
-      font-size: 1.15rem;
+    /* Cell Components */
+    .sym-cell {
       font-weight: bold;
     }
-    .sym-link:hover {
-      color: #2962ff;
+    .symbol-link {
+      color: #fff;
+      text-decoration: none;
     }
-    .mode-badge {
-      font-size: 0.65rem;
+    .symbol-link:hover {
+      color: #2962ff;
+      text-decoration: underline;
+    }
+    
+    .mode-tag {
+      font-size: 0.6rem;
       font-weight: bold;
       background: #2962ff;
       color: #fff;
-      padding: 2px 6px;
-      border-radius: 4px;
+      padding: 1px 4px;
+      border-radius: 3px;
     }
-    .mode-badge.ew {
-      background: #f57c00;
+    .mode-tag.ew {
+      background: #e65100;
     }
-    .score-badge {
-      font-size: 0.75rem;
+
+    .grade-text {
       font-weight: bold;
-      padding: 4px 8px;
-      border-radius: 4px;
-      background: #2a2e39;
     }
     .quality-a {
       color: #00ff88;
-      background: rgba(13, 44, 29, 0.3);
     }
     .quality-b {
       color: #29b6f6;
-      background: rgba(41, 182, 246, 0.15);
     }
     .quality-c {
       color: #ffca28;
-      background: rgba(255, 202, 40, 0.15);
     }
     .quality-reject {
       color: #ff4a4a;
-      background: rgba(255, 74, 74, 0.15);
     }
 
-    .price-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      background: #131722;
-      border-radius: 6px;
-      padding: 10px;
-      border: 1px solid #2a2e39;
+    .price-col {
+      font-family: monospace;
+      color: #ddd;
     }
-    .price-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
+    .pct-col {
+      font-family: monospace;
+      font-weight: bold;
     }
-    .price-lbl {
-      font-size: 0.7rem;
-      color: #888;
-      text-transform: uppercase;
-    }
-    .price-val {
-      font-size: 0.85rem;
-      font-weight: 500;
-      color: #fff;
-    }
-    .pct-move.positive {
+    .pct-col.positive {
       color: #00ff88;
     }
-    .pct-move.negative {
+    .pct-col.negative {
       color: #ff4a4a;
     }
 
-    .card-details {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      font-size: 0.8rem;
-      border-bottom: 1px solid #2a2e39;
-      padding-bottom: 10px;
-    }
-    .detail-row {
-      display: flex;
-      justify-content: space-between;
-    }
-    .detail-lbl {
-      color: #888;
-    }
-    .detail-val {
-      color: #fff;
-      font-weight: 500;
-    }
-    .status-tag {
-      font-size: 0.7rem;
+    .status-lbl {
+      font-size: 0.6rem;
       font-weight: bold;
-      padding: 1px 6px;
-      border-radius: 4px;
+      padding: 1px 4px;
+      border-radius: 3px;
       background: #2a2e39;
+      color: #ccc;
     }
-    .status-tag.fresh {
+    .status-lbl.fresh {
       color: #00ff88;
       background: rgba(13, 44, 29, 0.3);
     }
-    .status-tag.watch {
-      color: #29b6f6;
-    }
-    .status-tag.stale {
-      color: #aaa;
-    }
-    .status-tag.expired {
-      color: #888;
-    }
-    .status-tag.conflict {
-      color: #ff4a4a;
-      background: rgba(255, 74, 74, 0.15);
-    }
-    .conf-tag {
+    .status-lbl.watch {
       color: #29b6f6;
       background: rgba(41, 182, 246, 0.1);
-      padding: 1px 6px;
-      border-radius: 4px;
     }
-
-    .reasons-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
+    .status-lbl.stale {
+      color: #aaa;
     }
-    .reason-badge {
-      font-size: 0.7rem;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: rgba(0, 255, 136, 0.1);
-      color: #00ff88;
+    .status-lbl.expired {
+      color: #666;
     }
-    .reason-badge.penalty {
-      background: rgba(255, 74, 74, 0.1);
+    .status-lbl.conflict {
       color: #ff4a4a;
-    }
-
-    .conflict-banner {
       background: rgba(255, 74, 74, 0.15);
-      border: 1px solid #ff4a4a;
-      color: #ff4a4a;
-      padding: 6px;
-      border-radius: 4px;
-      font-size: 0.75rem;
-      text-align: center;
-      font-weight: bold;
     }
 
-    .card-actions {
-      display: flex;
-      gap: 8px;
-    }
-    .action-btn {
-      flex: 1;
-      text-align: center;
-      padding: 6px 12px;
-      border-radius: 4px;
-      font-size: 0.8rem;
-      font-weight: 500;
-      text-decoration: none;
-      transition: background 0.2s ease;
-    }
-    .tv-btn {
-      background: #2962ff;
-      color: #fff;
-    }
-    .tv-btn:hover {
-      background: #1565c0;
-    }
-    .fz-btn {
-      background: #388e3c;
-      color: #fff;
-    }
-    .fz-btn:hover {
-      background: #2e7d32;
-    }
-    .empty-list {
-      text-align: center;
+    .reasons-cell {
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
       color: #888;
-      padding: 24px;
-      font-size: 0.85rem;
+      font-size: 0.7rem;
+    }
+
+    .actions-cell {
+      display: flex;
+      gap: 4px;
+      justify-content: center;
+    }
+    .mini-btn {
+      font-size: 0.6rem;
+      font-weight: 500;
+      color: #fff;
+      text-decoration: none;
+      padding: 2px 4px;
+      border-radius: 3px;
+      transition: opacity 0.2s ease;
+    }
+    .mini-btn:hover {
+      opacity: 0.8;
+    }
+    .mini-btn.tv {
+      background: #2962ff;
+    }
+    .mini-btn.fz {
+      background: #388e3c;
     }
 
     @media (max-width: 1024px) {
       .tables-grid {
         grid-template-columns: 1fr;
-        gap: 16px;
+        gap: 12px;
       }
     }
   `]
@@ -659,7 +546,6 @@ export class Screener implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (data) => {
-          // Filter specifically for GoldenCross setups
           this.allSetups = data.filter(s => 
             s.strategy_name === 'golden_death_cross' || 
             s.group_name.startsWith('GoldenCross -') ||
@@ -721,7 +607,7 @@ export class Screener implements OnInit, OnDestroy {
     this.totalBullish = bullishList.length;
     this.totalBearish = bearishList.length;
 
-    // Limit to top 20 cards each
+    // Limit to top 20 rows each
     this.filteredBullish = bullishList.slice(0, 20);
     this.filteredBearish = bearishList.slice(0, 20);
   }
@@ -740,13 +626,6 @@ export class Screener implements OnInit, OnDestroy {
     const timeVal = card.signal_bar_time ? new Date(card.signal_bar_time).getTime() : new Date().getTime();
     const ageMins = Math.round((Date.now() - timeVal) / 60000);
     return ageMins >= 0 ? ageMins : 0;
-  }
-
-  getConfirmationsList(card: any): string {
-    if (card.confirmations && Array.isArray(card.confirmations)) {
-      return card.confirmations.map((c: string) => c === 'alphatrend_reversal' ? 'AT' : 'Cross').join(', ');
-    }
-    return card.strategy_name === 'alphatrend_reversal' ? 'AT' : 'Cross';
   }
 
   ngOnDestroy(): void {
