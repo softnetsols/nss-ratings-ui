@@ -1,6 +1,27 @@
 const { createClient } = require('@supabase/supabase-js');
 
 function calculateScoreAndReasons(item, direction) {
+  // If pre-calculated in Pine Script, decode the bitwise packed reasons
+  if (item.score_reasons !== undefined && item.score_reasons !== "") {
+    const pineScore = Number(item.score) || 30;
+    const packed = Number(item.score_reasons) || 0;
+    const reasons = ["+30 Base Setup"];
+    const rvol = Number(item.rvol) || 0.0;
+    
+    if (packed & 1) reasons.push("+15 EMA Trend Alignment");
+    if (packed & 2) reasons.push("+15 VWAP Alignment (<1.25%)");
+    if (packed & 4) reasons.push("+15 Volume Expansion (RVOL " + rvol.toFixed(1) + ")");
+    if (packed & 8) reasons.push(direction === 'bullish' ? "+10 Stock Stronger than SPY" : "+10 Stock Weaker than SPY");
+    if (packed & 16) reasons.push(direction === 'bullish' ? "+15 Near Daily High Breakout" : "+15 Near Daily Low Breakdown");
+    if (packed & 32) reasons.push(direction === 'bullish' ? "+10 Premarket High Cleared" : "+10 Premarket Low Cleared");
+    if (packed & 64) reasons.push("-15 Midday Chop Period");
+    if (packed & 128) reasons.push("-25 Extended from VWAP (>1.25%)");
+    if (packed & 256) reasons.push("-15 Extended from EMA9 (>1.5%)");
+    if (packed & 512) reasons.push("-15 Premarket Low Volume");
+    
+    return { score: Math.max(0, Math.min(100, pineScore)), reasons };
+  }
+
   let score = 30;
   const reasons = ["+30 Base Setup"];
 
