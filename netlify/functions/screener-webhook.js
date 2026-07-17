@@ -190,38 +190,73 @@ exports.handler = async (event, context) => {
     const rows = [];
     const processItems = (items, direction) => {
       for (const item of items) {
-        const signal_bar_time = item.signal_time ? new Date(Number(item.signal_time)).toISOString() : new Date().toISOString();
-        const timeframe = item.timeframe || '15';
-        const strategy = item.strategy || 'unknown';
-        const signal_id = `${item.sym}_${strategy}_${direction}_${timeframe}_${item.signal_time || Date.now()}`;
+        // Support both short and long keys
+        const sym = item.s || item.sym;
+        const price = item.p !== undefined ? Number(item.p) : (item.price !== undefined ? Number(item.price) : 0.0);
+        const chg = item.c !== undefined ? Number(item.c) : (item.chg !== undefined ? Number(item.chg) : 0.0);
+        const rvol = item.rv !== undefined ? Number(item.rv) : (item.rvol !== undefined ? Number(item.rvol) : 0.0);
+        const score_val = item.sc !== undefined ? Number(item.sc) : (item.score !== undefined ? Number(item.score) : 0.0);
+        const signal_time = item.st !== undefined ? item.st : item.signal_time;
+        const trigger_price_val = item.tp !== undefined ? Number(item.tp) : (item.trigger_price !== undefined ? Number(item.trigger_price) : price);
+        const vwap = item.at !== undefined ? Number(item.at) : (item.vwap !== undefined ? Number(item.vwap) : 0.0);
+        const is_reset = item.ir !== undefined ? (item.ir === true || item.ir === "true") : (item.is_reset === true || item.is_reset === "true" || item.is_reset_float === 1.0);
+        const timeframe = item.tf || item.timeframe || '15';
+        const score_reasons = item.rs !== undefined ? String(item.rs) : (item.score_reasons !== undefined ? String(item.score_reasons) : "");
+
+        const normalizedItem = {
+          sym,
+          price,
+          chg,
+          rvol,
+          score: score_val,
+          signal_time,
+          trigger_price: trigger_price_val,
+          vwap,
+          is_reset,
+          timeframe,
+          score_reasons,
+          strategy: item.strategy || (group_name.includes("AlphaTrend") ? "alphatrend_reversal" : "goldencross"),
+          volume: item.volume !== undefined ? Number(item.volume) : 0.0,
+          day_high: item.day_high !== undefined ? Number(item.day_high) : price,
+          day_low: item.day_low !== undefined ? Number(item.day_low) : price,
+          premarket_high: item.premarket_high !== undefined ? Number(item.premarket_high) : null,
+          premarket_low: item.premarket_low !== undefined ? Number(item.premarket_low) : null,
+          sw_high: item.sw_high !== undefined ? Number(item.sw_high) : null,
+          sw_low: item.sw_low !== undefined ? Number(item.sw_low) : null,
+          sig_high: item.sig_high !== undefined ? Number(item.sig_high) : null,
+          sig_low: item.sig_low !== undefined ? Number(item.sig_low) : null,
+          at_val: item.at_val !== undefined ? Number(item.at_val) : null,
+          atr: item.atr !== undefined ? Number(item.atr) : null
+        };
+
+        const signal_bar_time = normalizedItem.signal_time ? new Date(Number(normalizedItem.signal_time)).toISOString() : new Date().toISOString();
+        const signal_id = `${normalizedItem.sym}_${normalizedItem.strategy}_${direction}_${normalizedItem.timeframe}_${normalizedItem.signal_time || Date.now()}`;
 
         // Scoring
-        const { score, reasons } = calculateScoreAndReasons(item, direction);
+        const { score, reasons } = calculateScoreAndReasons(normalizedItem, direction);
         const quality = score >= 80 ? 'A' : (score >= 65 ? 'B' : (score >= 50 ? 'C' : 'R'));
 
         // Calculations
-        const price = Number(item.price) || 0.0;
-        const vwap = Number(item.vwap) || 0.0;
-        const ema9 = Number(item.ema9) || 0.0;
-        const day_high = Number(item.day_high) || price;
-        const day_low = Number(item.day_low) || price;
+        const ema9 = Number(normalizedItem.ema9) || 0.0;
+        const day_high = Number(normalizedItem.day_high) || price;
+        const day_low = Number(normalizedItem.day_low) || price;
         
         const distance_from_vwap_pct = vwap !== 0 ? ((price - vwap) / vwap) * 100 : 0.0;
         const distance_from_ema9_pct = ema9 !== 0 ? ((price - ema9) / ema9) * 100 : 0.0;
         const move_from_day_high_pct = day_high !== 0 ? ((price - day_high) / day_high) * 100 : 0.0;
         const move_from_day_low_pct = day_low !== 0 ? ((price - day_low) / day_low) * 100 : 0.0;
-        const move_from_premarket_high_pct = item.premarket_high ? ((price - item.premarket_high) / item.premarket_high) * 100 : null;
-        const move_from_premarket_low_pct = item.premarket_low ? ((price - item.premarket_low) / item.premarket_low) * 100 : null;
+        const move_from_premarket_high_pct = normalizedItem.premarket_high ? ((price - normalizedItem.premarket_high) / normalizedItem.premarket_high) * 100 : null;
+        const move_from_premarket_low_pct = normalizedItem.premarket_low ? ((price - normalizedItem.premarket_low) / normalizedItem.premarket_low) * 100 : null;
 
         // Trade plan fields parsing & calculations
-        const recent_swing_high = item.sw_high !== undefined && item.sw_high !== null ? Number(item.sw_high) : null;
-        const recent_swing_low = item.sw_low !== undefined && item.sw_low !== null ? Number(item.sw_low) : null;
-        const signal_candle_high = item.sig_high !== undefined && item.sig_high !== null ? Number(item.sig_high) : null;
-        const signal_candle_low = item.sig_low !== undefined && item.sig_low !== null ? Number(item.sig_low) : null;
-        const alphatrend_at_signal = item.at_val !== undefined && item.at_val !== null ? Number(item.at_val) : null;
-        const atr = item.atr !== undefined && item.atr !== null ? Number(item.atr) : null;
+        const recent_swing_high = normalizedItem.sw_high !== undefined && normalizedItem.sw_high !== null ? Number(normalizedItem.sw_high) : null;
+        const recent_swing_low = normalizedItem.sw_low !== undefined && normalizedItem.sw_low !== null ? Number(normalizedItem.sw_low) : null;
+        const signal_candle_high = normalizedItem.sig_high !== undefined && normalizedItem.sig_high !== null ? Number(normalizedItem.sig_high) : null;
+        const signal_candle_low = normalizedItem.sig_low !== undefined && normalizedItem.sig_low !== null ? Number(normalizedItem.sig_low) : null;
+        const alphatrend_at_signal = normalizedItem.at_val !== undefined && normalizedItem.at_val !== null ? Number(normalizedItem.at_val) : null;
+        const atr = normalizedItem.atr !== undefined && normalizedItem.atr !== null ? Number(normalizedItem.atr) : null;
 
-        const trigger_price = item.trigger_price || price;
+        const trigger_price = normalizedItem.trigger_price || price;
         const entry_type = "signal_entry";
         const entry_price_est = trigger_price;
         const atr_stop_buffer = 0.25;
@@ -329,27 +364,27 @@ exports.handler = async (event, context) => {
 
         rows.push({
           signal_id,
-          symbol: item.sym,
+          symbol: normalizedItem.sym,
           group_name,
           strategy_name: strategy,
           direction,
           timeframe,
-          signal_mode: item.mode || 'confirmed',
+          signal_mode: normalizedItem.mode || 'confirmed',
           signal_bar_time,
           alert_received_at: new Date().toISOString(),
           trigger_price,
           current_price: price,
           current_price_updated_at: new Date().toISOString(),
-          vwap_at_signal: item.vwap,
-          ema9_at_signal: item.ema9,
-          ema21_at_signal: item.ema21,
+          vwap_at_signal: normalizedItem.vwap,
+          ema9_at_signal: normalizedItem.ema9,
+          ema21_at_signal: normalizedItem.ema21,
           atr_at_signal: atr,
-          volume_at_signal: item.volume,
-          relative_volume_at_signal: item.rvol,
-          day_high_at_signal: item.day_high,
-          day_low_at_signal: item.day_low,
-          premarket_high: item.premarket_high,
-          premarket_low: item.premarket_low,
+          volume_at_signal: normalizedItem.volume,
+          relative_volume_at_signal: normalizedItem.rvol,
+          day_high_at_signal: normalizedItem.day_high,
+          day_low_at_signal: normalizedItem.day_low,
+          premarket_high: normalizedItem.premarket_high,
+          premarket_low: normalizedItem.premarket_low,
           distance_from_vwap_pct,
           distance_from_ema9_pct,
           move_from_day_high_pct,
@@ -359,7 +394,7 @@ exports.handler = async (event, context) => {
           signal_score: score,
           signal_quality: quality,
           status,
-          score_reasons: item.score_reasons || [],
+          score_reasons: reasons,
           duplicate_of_signal_id: null,
           confirmation_count: 1,
           confirmations: [strategy],
@@ -368,7 +403,7 @@ exports.handler = async (event, context) => {
           outcome_60m: null,
           max_favorable_move: 0.0,
           max_adverse_move: 0.0,
-          raw_alert_payload: item,
+          raw_alert_payload: normalizedItem,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           
