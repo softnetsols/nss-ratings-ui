@@ -464,6 +464,7 @@ exports.handler = async (event, context) => {
 
         // 1. Conflict check (opposite direction within 30 minutes)
         const conflictSignal = activeSignals.find(s => 
+          s.signal_id !== row.signal_id &&
           s.symbol === row.symbol && 
           s.direction !== row.direction &&
           Math.abs(new Date(s.signal_bar_time).getTime() - new Date(row.signal_bar_time).getTime()) < 30 * 60000
@@ -480,6 +481,7 @@ exports.handler = async (event, context) => {
 
         // 2. Duplicate check (same strategy + direction + timeframe within 30 min cooldown)
         const duplicateSignal = activeSignals.find(s => 
+          s.signal_id !== row.signal_id &&
           s.symbol === row.symbol && 
           s.strategy_name === row.strategy_name &&
           s.direction === row.direction &&
@@ -495,6 +497,7 @@ exports.handler = async (event, context) => {
 
         // 3. Multi-confirmation check (different strategy + same direction within 15 minutes)
         const confirmationSignal = activeSignals.find(s => 
+          s.signal_id !== row.signal_id &&
           s.symbol === row.symbol && 
           s.strategy_name !== row.strategy_name &&
           s.direction === row.direction &&
