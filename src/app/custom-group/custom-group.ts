@@ -908,7 +908,7 @@ export class CustomGroup implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (data) => {
-          this.allSetups = data.filter(s => s.group_name.startsWith('Custom'));
+          this.allSetups = data.filter(s => (s.group_name && s.group_name.toLowerCase().includes('custom')) || (s.strategy_name && s.strategy_name.toLowerCase().includes('custom')) );
           
           this.applyFilters(true);
           this.loading = false;
