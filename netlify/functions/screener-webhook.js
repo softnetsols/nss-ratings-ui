@@ -231,6 +231,7 @@ exports.handler = async (event, context) => {
 
         const signal_bar_time = normalizedItem.signal_time ? new Date(Number(normalizedItem.signal_time)).toISOString() : new Date().toISOString();
         const signal_id = `${normalizedItem.sym}_${normalizedItem.strategy}_${direction}_${normalizedItem.timeframe}_${normalizedItem.signal_time || Date.now()}`;
+        const strategy = normalizedItem.strategy;
 
         // Scoring
         const { score, reasons } = calculateScoreAndReasons(normalizedItem, direction);
