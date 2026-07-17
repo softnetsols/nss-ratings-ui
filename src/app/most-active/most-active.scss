@@ -1,0 +1,14 @@
+.loading-row,
+.empty-state {
+  padding: 16px;
+  text-align: center;
+  color: #666;
+  background: #fafafa;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+
+.error-state {
+  color: #b91c1c;
+  background: #fef2f2;
+}

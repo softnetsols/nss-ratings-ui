@@ -92,7 +92,7 @@ import { SupabaseService } from '../../services/supabase.service';
                   <th (click)="toggleSort('target2_price')" class="sortable-th">Target 2 <span *ngIf="sortKey === 'target2_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('signal_bar_time')" class="sortable-th">Time <span *ngIf="sortKey === 'signal_bar_time'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('status')" class="sortable-th" style="text-align: center;">St <span *ngIf="sortKey === 'status'">{{ sortAsc ? '▲' : '▼' }}</span></th>
-                  <th>Reasons</th>
+                  
                   <th style="text-align: center;">Links</th>
                 </tr>
               </thead>
@@ -123,16 +123,18 @@ import { SupabaseService } from '../../services/supabase.service';
                     <span class="status-lbl" [class]="s.status" [title]="s.status | uppercase">{{ getStatusShortCode(s.status) }}</span>
                   </td>
                   <td class="reasons-cell">
-                    <div class="reasons-list">
-                      <span *ngFor="let r of s.score_reasons" class="reason-pill" [class.penalty-pill]="isPenalty(r)">
-                        {{ r }}
-                      </span>
-                      <span *ngIf="!s.score_reasons || s.score_reasons.length === 0" class="no-reasons">-</span>
-                    </div>
+                    <div class="reasons-list">-</div>
                   </td>
                   <td class="actions-cell">
+                    <button class="mini-btn info" type="button" (click)="toggleReasons(s, $event)" aria-label="Reasons">ℹ️</button>
                     <a [href]="'https://www.tradingview.com/chart/?symbol=' + s.symbol" target="_blank" class="mini-btn tv" title="TradingView" (click)="$event.stopPropagation()">TV</a>
                     <a [href]="'https://finviz.com/quote.ashx?t=' + s.symbol" target="_blank" class="mini-btn fz" title="Finviz" (click)="$event.stopPropagation()">FZ</a>
+
+                    <div *ngIf="openReasonsFor === s.symbol" class="reasons-popover" (click)="$event.stopPropagation()">
+                      <div class="popover-content">
+                        <pre>{{ s.score_reasons?.join('\n') || '-' }}</pre>
+                      </div>
+                    </div>
                   </td>
                 </tr>
                 <tr *ngIf="filteredBullish.length === 0">
@@ -141,7 +143,6 @@ import { SupabaseService } from '../../services/supabase.service';
               </tbody>
             </table>
           </div>
-          <!-- Pagination Control -->
           <div class="pagination-bar" *ngIf="totalBullishPages > 1">
             <button class="pag-btn" (click)="prevBullishPage()" [disabled]="bullishPage === 1">◀ Prev</button>
             <span class="pag-info">Page {{ bullishPage }} of {{ totalBullishPages }}</span>
@@ -168,7 +169,7 @@ import { SupabaseService } from '../../services/supabase.service';
                   <th (click)="toggleSort('target2_price')" class="sortable-th">Target 2 <span *ngIf="sortKey === 'target2_price'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('signal_bar_time')" class="sortable-th">Time <span *ngIf="sortKey === 'signal_bar_time'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th (click)="toggleSort('status')" class="sortable-th" style="text-align: center;">St <span *ngIf="sortKey === 'status'">{{ sortAsc ? '▲' : '▼' }}</span></th>
-                  <th>Reasons</th>
+                  
                   <th style="text-align: center;">Links</th>
                 </tr>
               </thead>
@@ -657,6 +658,7 @@ import { SupabaseService } from '../../services/supabase.service';
       display: flex;
       gap: 4px;
       justify-content: center;
+      position: relative;
     }
     .mini-btn {
       font-size: 0.58rem;
@@ -677,6 +679,26 @@ import { SupabaseService } from '../../services/supabase.service';
     }
     .mini-btn.fz {
       color: #86efac;
+    }
+
+    .reasons-popover {
+      position: absolute;
+      top: 28px;
+      right: 0px;
+      z-index: 40;
+      background: #0b1220;
+      border: 1px solid #23303a;
+      border-radius: 6px;
+      padding: 8px;
+      min-width: 200px;
+      max-width: 360px;
+      box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+    }
+    .reasons-popover pre {
+      margin: 0;
+      white-space: pre-wrap;
+      color: #cbd5e1;
+      font-size: 0.72rem;
     }
 
     /* Pagination CSS */
@@ -854,6 +876,7 @@ export class Screener implements OnInit, OnDestroy {
   totalBearish = 0;
   loading = true;
   selectedSignal: any = null;
+  openReasonsFor: string | null = null;
 
   // Pagination parameters
   bullishPage = 1;
@@ -973,6 +996,19 @@ export class Screener implements OnInit, OnDestroy {
       this.bearishPage++;
       this.applyFilters(false);
     }
+  }
+
+  toggleReasons(s: any, event: Event): void {
+    event.stopPropagation();
+    if (this.openReasonsFor === s.symbol) {
+      this.openReasonsFor = null;
+    } else {
+      this.openReasonsFor = s.symbol;
+    }
+  }
+
+  closeReasons(): void {
+    this.openReasonsFor = null;
   }
 
   applyFilters(resetPages = true): void {

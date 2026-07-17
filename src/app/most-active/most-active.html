@@ -1,4 +1,14 @@
- <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
+<div *ngIf="loading" class="loading-row">Loading most active stocks…</div>
+
+<div *ngIf="!loading && !hasError && dataSource.data.length === 0" class="empty-state">
+  {{ emptyMessage }}
+</div>
+
+<div *ngIf="hasError" class="empty-state error-state">
+  Unable to load most active stocks right now. Please try again later.
+</div>
+
+<table *ngIf="!loading && dataSource.data.length > 0" mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
 
     <ng-container matColumnDef="symbol">
       <th mat-header-cell *matHeaderCellDef mat-sort-header> Symbol </th>
