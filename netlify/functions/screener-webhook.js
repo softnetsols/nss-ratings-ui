@@ -162,9 +162,17 @@ exports.handler = async (event, context) => {
     const payload = JSON.parse(event.body);
 
     // Verify token (authorization header or query param)
-    const token = event.headers['authorization'] || (event.queryStringParameters && event.queryStringParameters.token);
-    const expectedToken = process.env.WEBHOOK_SECRET_TOKEN;
-    if (expectedToken && token !== expectedToken) {
+    const expectedToken = process.env.WEBHOOK_SECRET || process.env.WEBHOOK_SECRET_TOKEN;
+    if (!expectedToken) {
+      return {
+        statusCode: 500,
+        body: 'Webhook secret is not configured on the server.'
+      };
+    }
+
+    const headerToken = event.headers['authorization'] || event.headers['Authorization'];
+    const token = headerToken || (event.queryStringParameters && event.queryStringParameters.token);
+    if (!token || token !== expectedToken) {
       return {
         statusCode: 401,
         body: 'Unauthorized'

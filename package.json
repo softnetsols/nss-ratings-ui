@@ -3,10 +3,13 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "npx ng build && cp -r netlify dist/nss-ratings/browser/",
+    "start": "ng serve --configuration development --proxy-config proxy.conf.json",
+    "build": "ng build --configuration production",
+    "build:dev": "ng build --configuration development",
+    "build:netlify": "node scripts/netlify-build.mjs",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "netlify:dev": "netlify dev"
   },
   "private": true,
   "dependencies": {
@@ -19,6 +22,7 @@
     "@angular/forms": "^20.0.0",
     "@angular/material": "^20.0.3",
     "@angular/platform-browser": "^20.0.0",
+    "@angular/platform-browser-dynamic": "^20.3.26",
     "@angular/router": "^20.0.0",
     "firebase": "^11.9.1",
     "rxjs": "~7.8.0",
