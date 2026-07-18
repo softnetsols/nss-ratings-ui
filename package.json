@@ -3,10 +3,13 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "npx ng build && cp -r netlify dist/nss-ratings/browser/",
+    "start": "ng serve --configuration development --proxy-config proxy.conf.json",
+    "build": "ng build --configuration production",
+    "build:dev": "ng build --configuration development",
+    "build:netlify": "node scripts/netlify-build.mjs",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "netlify:dev": "netlify dev"
   },
   "private": true,
   "dependencies": {
@@ -37,6 +40,7 @@
     "karma-coverage": "~2.2.0",
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
+    "netlify-cli": "^12.0.0",
     "typescript": "~5.8.2"
   }
 }

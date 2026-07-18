@@ -1,4 +1,18 @@
 [build]
-  command = "npm run build"
+  command = "npm run build:netlify"
   publish = "dist/nss-ratings/browser"
   functions = "netlify/functions"
+
+[context.dev]
+  command = "npm run build:dev"
+
+[dev]
+  command = "npm run start"
+  targetPort = 4200
+  port = 8888
+  autoLaunch = false
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
