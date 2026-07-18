@@ -89,6 +89,7 @@ jobs:
       - name: Deploy application and functions to Netlify
         run: |
           npx --yes netlify-cli@latest deploy \
+            --no-build \
             --prod \
             --dir="dist/nss-ratings/browser" \
             --functions="netlify/functions" \
