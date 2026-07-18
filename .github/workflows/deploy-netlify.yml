@@ -51,6 +51,30 @@ jobs:
           test -f "dist/nss-ratings/browser/index.html"
           echo "Angular output verified"
 
+      - name: Validate deployment secrets
+        shell: bash
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_DEV_SITE_ID: ${{ secrets.NETLIFY_DEV_SITE_ID }}
+          NETLIFY_PROD_SITE_ID: ${{ secrets.NETLIFY_PROD_SITE_ID }}
+        run: |
+          if [ -z "$NETLIFY_AUTH_TOKEN" ]; then
+            echo "NETLIFY_AUTH_TOKEN is missing"
+            exit 1
+          fi
+
+          if [ "$GITHUB_REF_NAME" = "dev" ] && [ -z "$NETLIFY_DEV_SITE_ID" ]; then
+            echo "NETLIFY_DEV_SITE_ID is missing"
+            exit 1
+          fi
+
+          if [ "$GITHUB_REF_NAME" = "main" ] && [ -z "$NETLIFY_PROD_SITE_ID" ]; then
+            echo "NETLIFY_PROD_SITE_ID is missing"
+            exit 1
+          fi
+
+          echo "Required Netlify secrets are present"
+
       - name: Select Netlify site
         shell: bash
         run: |
