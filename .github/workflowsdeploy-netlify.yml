@@ -1,0 +1,75 @@
+name: Deploy to Netlify
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netlify-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Angular application
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            echo "Building production from main"
+            npm run build
+          elif [ "$GITHUB_REF_NAME" = "dev" ]; then
+            echo "Building development from dev"
+            npm run build:dev
+          else
+            echo "Unsupported branch: $GITHUB_REF_NAME"
+            exit 1
+          fi
+
+      - name: Verify Angular output
+        run: |
+          test -f "dist/nss-ratings/browser/index.html"
+          echo "Angular output verified"
+
+      - name: Select Netlify site
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            echo "NETLIFY_SITE_ID=${{ secrets.NETLIFY_PROD_SITE_ID }}" >> "$GITHUB_ENV"
+            echo "Deploying to production Netlify site"
+          else
+            echo "NETLIFY_SITE_ID=${{ secrets.NETLIFY_DEV_SITE_ID }}" >> "$GITHUB_ENV"
+            echo "Deploying to development Netlify site"
+          fi
+
+      - name: Deploy application and functions to Netlify
+        run: |
+          npx netlify deploy \
+            --prod \
+            --dir="dist/nss-ratings/browser" \
+            --functions="netlify/functions" \
+            --site="$NETLIFY_SITE_ID" \
+            --auth="$NETLIFY_AUTH_TOKEN" \
+            --message="GitHub Actions: $GITHUB_SHA"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
