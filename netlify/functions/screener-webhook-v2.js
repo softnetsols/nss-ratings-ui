@@ -395,7 +395,35 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    const payload = JSON.parse(event.body);
+    // ── GUARDED JSON PARSE ────────────────────────────────────────────────
+    // Emit diagnostic context on parse failure so we can trace the raw body
+    // without exposing webhook tokens or Supabase secrets.
+    let payload;
+    try {
+      payload = JSON.parse(event.body);
+    } catch (parseError) {
+      const rawBody  = event.body || '';
+      const preview  = rawBody
+        .slice(0, 1000)
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r');
+      console.error('[screener-webhook-v2] JSON parse failure');
+      console.error('  error   :', parseError.message);
+      console.error('  bodyLen :', rawBody.length);
+      console.error('  ctype   :', event.headers['content-type'] || event.headers['Content-Type'] || 'not set');
+      console.error('  body[0:1000]:', preview);
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          success: false,
+          error:   'Invalid JSON payload',
+          details: parseError.message
+        })
+      };
+    }
+    // ── END GUARDED JSON PARSE ────────────────────────────────────────────
+
 
     // Verify token (authorization header or query param)
     const expectedToken = process.env.WEBHOOK_SECRET || process.env.WEBHOOK_SECRET_TOKEN;
