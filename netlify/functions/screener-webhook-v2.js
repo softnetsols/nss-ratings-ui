@@ -461,9 +461,22 @@ exports.handler = async (event, context) => {
     let rows = [];
 
     if (payload.schema === 'nss-watchlist-v1') {
-      // ── NEW PATH: Single-symbol Watchlist Alert ────────────────────────
+      // ── NEW PATH: Single-symbol Watchlist Alert ──────────────────────
       console.log(`[nss-watchlist-v1] Received payload for ${payload.symbolId}`);
       rows = processWatchlistV1(payload);
+
+      // Actionable event summary log
+      const eventSummary = (payload.events || [])
+        .map(ev => `${ev.strategy}:${ev.event}`)
+        .join(',');
+      console.log(
+        `[nss-watchlist-v1] symbol=${payload.ticker || payload.symbolId} ` +
+        `events=${eventSummary || 'NONE'} generatedRows=${rows.length}`
+      );
+
+      if (rows.length === 0) {
+        console.log('[nss-watchlist-v1] No actionable BUY/SELL events; Supabase upsert skipped');
+      }
     } else {
       // ── LEGACY PATH: Group bullish[]/bearish[] arrays ──────────────────
       const bullish = payload.bullish || [];
@@ -721,6 +734,8 @@ exports.handler = async (event, context) => {
     }
     // ── END SCHEMA ROUTING ────────────────────────────────────────────────
 
+    let insertedRows = 0;  // updated inside the upsert block if rows are written
+
     if (rows.length > 0) {
       const symbolsInPayload = [...new Set(rows.map(r => r.symbol))];
 
@@ -902,7 +917,24 @@ exports.handler = async (event, context) => {
           .upsert(Array.from(upsertRows.values()), { onConflict: 'signal_id' });
 
         if (upsertError) {
-          console.error('Unified bulk upsert error:', upsertError);
+          console.error('[screener-webhook-v2] Supabase upsert failed:', upsertError.message, '| code:', upsertError.code);
+          return {
+            statusCode: 500,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              success:       false,
+              error:         'Supabase upsert failed',
+              details:       upsertError.message,
+              code:          upsertError.code || null,
+              generatedRows: rows.length,
+              insertedRows:  0
+            })
+          };
+        }
+
+        insertedRows = upsertRows.size;
+        if (payload.schema === 'nss-watchlist-v1') {
+          console.log(`[nss-watchlist-v1] Supabase upsert successful insertedRows=${insertedRows}`);
         }
       }
     }
@@ -923,10 +955,20 @@ exports.handler = async (event, context) => {
         });
     }
 
+    const receivedEvents = (payload.events || []).length;
+    const generatedRows  = rows.length;
+    const skippedRows    = generatedRows - insertedRows;
+
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: true, count: rows.length })
+      body: JSON.stringify({
+        success:        true,
+        receivedEvents,
+        generatedRows,
+        insertedRows,
+        skippedRows
+      })
     };
 
   } catch (err) {
