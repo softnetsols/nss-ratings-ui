@@ -917,6 +917,7 @@ export class Screener implements OnInit, OnDestroy {
         next: (data) => {
           this.allSetups = data.filter(s => 
             s.strategy_name === 'golden_death_cross' || 
+            s.strategy_name === 'goldencross' ||
             s.group_name.startsWith('GoldenCross -') ||
             (!s.strategy_name && !s.group_name.startsWith('AlphaTrend -'))
           );

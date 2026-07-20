@@ -227,7 +227,7 @@ function processWatchlistV1(payload) {
     // Map strategy name to legacy format
     const strategy_name =
       strategy === 'ALPHATREND' ? 'alphatrend_reversal' :
-      strategy === 'GOLDENCROSS' ? 'goldencross' :
+      strategy === 'GOLDENCROSS' ? 'golden_death_cross' :
       strategy.toLowerCase();
 
     // Signal bar time (ISO) from close timestamp

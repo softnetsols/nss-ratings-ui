@@ -6,7 +6,6 @@ import { MostActive } from "./most-active/most-active";
 import { CommonModule } from '@angular/common';
 import { Watchlist } from "./watchlist/watchlist";
 import { Screener } from "./screener/screener";
-import { CustomGroup } from "./custom-group/custom-group";
 import { AlphaTrend } from "./alphatrend/alphatrend";
 
 @Component({
@@ -20,7 +19,6 @@ import { AlphaTrend } from "./alphatrend/alphatrend";
         MostActive,
         Watchlist,
         Screener,
-        CustomGroup,
         AlphaTrend
     ],
     template: `
@@ -28,7 +26,6 @@ import { AlphaTrend } from "./alphatrend/alphatrend";
     <div class="nav-container">
       <button mat-button [class.active]="view === 'alphatrend'" (click)="view = 'alphatrend'">AlphaTrend Pullback</button>
       <button mat-button [class.active]="view === 'screener'" (click)="view = 'screener'">Golden/Death Cross Screener</button>
-      <button mat-button [class.active]="view === 'custom-group'" (click)="view = 'custom-group'">Custom Group</button>
       <button mat-button [class.active]="view === 'watchlist'" (click)="view = 'watchlist'">Watch List</button>
       <button mat-button [class.active]="view === 'recommendations'" (click)="view = 'recommendations'">View Recommendations</button>
       <button mat-button [class.active]="view === 'mostactive'" (click)="view = 'mostactive'">View Most Active</button>
@@ -37,7 +34,6 @@ import { AlphaTrend } from "./alphatrend/alphatrend";
     <app-watchlist *ngIf="view === 'watchlist'"></app-watchlist>
     <app-most-active *ngIf="view === 'mostactive'"></app-most-active>
     <app-screener *ngIf="view === 'screener'"></app-screener>
-    <app-custom-group *ngIf="view === 'custom-group'"></app-custom-group>
     <app-alphatrend *ngIf="view === 'alphatrend'"></app-alphatrend>`,
     styles: [`
       .nav-container {
