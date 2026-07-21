@@ -491,7 +491,7 @@ exports.handler = async (event, context) => {
       const processItems = (items, direction) => {
         for (const item of items) {
           // Support both short and long keys
-          const sym = item.s || item.sym;
+          const sym = item.symbol || item.sym || item.s;
           const price = item.p !== undefined ? Number(item.p) : (item.price !== undefined ? Number(item.price) : 0.0);
           const chg = item.c !== undefined ? Number(item.c) : (item.chg !== undefined ? Number(item.chg) : 0.0);
           const rvol = item.rv !== undefined ? Number(item.rv) : (item.rvol !== undefined ? Number(item.rvol) : 0.0);
