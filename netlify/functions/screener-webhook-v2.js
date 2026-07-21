@@ -504,6 +504,7 @@ exports.handler = async (event, context) => {
           const score_reasons = item.rs !== undefined ? String(item.rs) : (item.score_reasons !== undefined ? String(item.score_reasons) : "");
 
           const normalizedItem = {
+            ...item,
             sym,
             price,
             chg,
