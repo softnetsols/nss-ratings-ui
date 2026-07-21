@@ -77,7 +77,10 @@ function calculateScoreAndReasons(item, direction) {
   const is_pm = (ny_day >= 1 && ny_day <= 5) && (ny_hour >= 4 && (ny_hour < 9 || (ny_hour === 9 && ny_minute < 30)));
   const is_regular = (ny_day >= 1 && ny_day <= 5) && ((ny_hour === 9 && ny_minute >= 30) || (ny_hour > 9 && ny_hour < 16));
 
-  if (direction === 'bullish') {
+  if (direction === 'flat') {
+    score = 100;
+    reasons.push("FLAT - Exiting position (Chop/Trend Break)");
+  } else if (direction === 'bullish') {
     // 1. EMA Trend
     if (price > ema9 && ema9 > ema21) {
       score += 15;
@@ -211,6 +214,7 @@ function processWatchlistV1(payload) {
       score: evScore,
       reasonMask,
       triggerPrice,
+      eventSignalTime,
       isReset,
       alphaTrendValue,
       ema9,
@@ -230,9 +234,10 @@ function processWatchlistV1(payload) {
       strategy === 'GOLDENCROSS' ? 'golden_death_cross' :
       strategy.toLowerCase();
 
-    // Signal bar time (ISO) from close timestamp
-    const signal_bar_time = signalBarCloseTime
-      ? new Date(Number(signalBarCloseTime)).toISOString()
+    // Signal bar time (ISO) from event-specific time (if present) or payload signalBarCloseTime
+    const effectiveCloseTime = eventSignalTime || signalBarCloseTime;
+    const signal_bar_time = effectiveCloseTime
+      ? new Date(Number(effectiveCloseTime)).toISOString()
       : new Date().toISOString();
 
     // signal_id uses the Pine eventId directly to guarantee idempotency.
@@ -567,7 +572,11 @@ exports.handler = async (event, context) => {
           let trade_plan_reason = "";
           let invalidation_reason = "";
 
-          if (direction === 'bullish') {
+          if (direction === 'flat') {
+            trade_plan_quality = "valid";
+            trade_plan_reason = "Flat state - position closed";
+            close_price_est = entry_price_est;
+          } else if (direction === 'bullish') {
             const supportCandidates = [];
             if (signal_candle_low !== null && !isNaN(signal_candle_low)) supportCandidates.push(signal_candle_low);
             if (recent_swing_low !== null && !isNaN(recent_swing_low)) supportCandidates.push(recent_swing_low);
@@ -729,8 +738,10 @@ exports.handler = async (event, context) => {
         }
       };
 
+      const flat = payload.flat || [];
       processItems(bullish, 'bullish');
       processItems(bearish, 'bearish');
+      processItems(flat, 'flat');
     }
     // ── END SCHEMA ROUTING ────────────────────────────────────────────────
 
