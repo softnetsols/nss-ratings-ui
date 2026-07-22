@@ -6,7 +6,7 @@ import { Subject, takeUntil } from 'rxjs';
 import { SupabaseService } from '../../services/supabase.service';
 
 @Component({
-  selector: 'app-screener',
+  selector: 'app-osob',
   standalone: true,
   imports: [
     CommonModule,
@@ -18,18 +18,13 @@ import { SupabaseService } from '../../services/supabase.service';
   template: `
     <div class="screener-container">
       <div class="screener-header">
-        <h2>Golden/Death Cross Screener</h2>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <button class="manual-refresh-btn" (click)="fetchData(true)" [disabled]="loading">
-            🔄 {{ loading ? 'Refreshing...' : 'Refresh' }}
-          </button>
-          <span class="refresh-indicator" [class.syncing]="loading">
-            {{ loading ? 'Updating...' : 'Ready' }}
-          </span>
-        </div>
+        <h2>Osob Pullback Reversal</h2>
+        <span class="refresh-indicator" [class.syncing]="loading">
+          {{ loading ? 'Updating...' : 'Auto-refreshing in 15s' }}
+        </span>
       </div>
 
-      <!-- Advanced Filter Panel (Matte style) -->
+      <!-- Advanced Filter Panel (Matte Compact style) -->
       <div class="filter-panel">
         <div class="search-box">
           <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="applyFilters()" placeholder="Search symbols, grades, reasons..." class="search-input" />
@@ -67,7 +62,7 @@ import { SupabaseService } from '../../services/supabase.service';
       </div>
 
       <div *ngIf="!loading && allSetups.length === 0" class="no-data">
-        No active setups found. Make sure your TradingView GoldenCross alerts are active.
+        No active setups found. Make sure your TradingView Osob alerts are active.
       </div>
 
       <!-- Side-by-Side Compact Tables -->
@@ -129,10 +124,11 @@ import { SupabaseService } from '../../services/supabase.service';
 
                     <div *ngIf="openReasonsFor === s.symbol" class="reasons-popover" (click)="$event.stopPropagation()">
                       <div class="popover-content">
-                        <div *ngFor="let item of getDisplayReasons(s)" class="translated-reason">
-                          <span class="reason-icon">{{ item.icon }}</span>
-                          <span class="reason-text">{{ item.text }}</span>
+                        <div *ngFor="let r of s.score_reasons" class="translated-reason">
+                          <span class="reason-icon">{{ isPenalty(r) ? '🔴' : '🟢' }}</span>
+                          <span class="reason-text">{{ translateReason(r, s.signal_mode) }}</span>
                         </div>
+                        <div *ngIf="!s.score_reasons || s.score_reasons.length === 0" class="no-reasons" style="color: #64748b; font-size: 0.72rem;">No reasons provided.</div>
                       </div>
                     </div>
                   </td>
@@ -143,6 +139,7 @@ import { SupabaseService } from '../../services/supabase.service';
               </tbody>
             </table>
           </div>
+          <!-- Pagination Control -->
           
         </div>
 
@@ -228,7 +225,7 @@ import { SupabaseService } from '../../services/supabase.service';
           <div class="modal-header">
             <span class="modal-title">
               <span class="modal-symbol">{{ selectedSignal.symbol }}</span>
-              <span class="modal-strategy">({{ selectedSignal.strategy_name === 'alphatrend_reversal' ? 'AlphaTrend' : 'Golden Cross' }})</span>
+              <span class="modal-strategy">({{ selectedSignal.strategy_name === 'osob_reversal' ? 'Osob' : 'Golden Cross' }})</span>
               <span class="modal-direction" [class.bullish]="selectedSignal.direction === 'bullish'" [class.bearish]="selectedSignal.direction === 'bearish'">
                 {{ selectedSignal.direction | uppercase }}
               </span>
@@ -248,8 +245,8 @@ import { SupabaseService } from '../../services/supabase.service';
             <div class="plan-section">
               <div class="plan-desc">
                 {{ selectedSignal.direction === 'bullish' 
-                   ? 'Entry is based on trigger price. Stop is below recent support (lows / swing lows). Target 2 is the main exit price.' 
-                   : 'Entry is based on trigger price. Stop is above recent resistance (highs / swing highs). Target 2 is the main cover price.' 
+                   ? 'Entry is based on trigger price. Stop is below recent support (lows / Osob line). Target 2 is the main exit price.' 
+                   : 'Entry is based on trigger price. Stop is above recent resistance (highs / Osob line). Target 2 is the main cover price.' 
                 }}
               </div>
               
@@ -299,11 +296,11 @@ import { SupabaseService } from '../../services/supabase.service';
                 <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: #9ca3af; line-height: 1.45;">
                   <li *ngIf="selectedSignal.direction === 'bullish'">Take partial profit at Target 1 (1:1 Reward to Risk).</li>
                   <li *ngIf="selectedSignal.direction === 'bullish'">Exit main position at Target 2 (2:1 Reward to Risk).</li>
-                  <li *ngIf="selectedSignal.direction === 'bullish'">Trail remaining shares using swing levels. Exit remaining if opposite crossover triggers or stop is hit.</li>
+                  <li *ngIf="selectedSignal.direction === 'bullish'">Trail remaining shares using Osob. Exit remaining if opposite bearish crossover triggers or stop is hit.</li>
                   
                   <li *ngIf="selectedSignal.direction === 'bearish'">Cover partial profit at Target 1 (1:1 Reward to Risk).</li>
                   <li *ngIf="selectedSignal.direction === 'bearish'">Cover main position at Target 2 (2:1 Reward to Risk).</li>
-                  <li *ngIf="selectedSignal.direction === 'bearish'">Trail remaining shares using swing levels. Exit remaining if opposite crossover triggers or stop is hit.</li>
+                  <li *ngIf="selectedSignal.direction === 'bearish'">Trail remaining shares using Osob. Exit remaining if opposite bullish crossover triggers or stop is hit.</li>
                 </ul>
               </div>
             </div>
@@ -332,19 +329,6 @@ import { SupabaseService } from '../../services/supabase.service';
       font-size: 1.2rem;
       font-weight: 500;
       color: #e5e7eb;
-    }
-    .manual-refresh-btn {
-      background: #1a1e27;
-      color: #e5e7eb;
-      border: 1px solid #27272a;
-      padding: 3px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.72rem;
-      transition: background-color 0.2s ease;
-    }
-    .manual-refresh-btn:hover {
-      background: #22252a;
     }
     .refresh-indicator {
       font-size: 0.72rem;
@@ -872,7 +856,7 @@ import { SupabaseService } from '../../services/supabase.service';
     }
   `]
 })
-export class Screener implements OnInit, OnDestroy {
+export class Osob implements OnInit, OnDestroy {
   allSetups: any[] = [];
   filteredBullish: any[] = [];
   filteredBearish: any[] = [];
@@ -894,12 +878,13 @@ export class Screener implements OnInit, OnDestroy {
   filterQualityA = true;
   filterQualityB = true;
   filterQualityC = false;
-  filterQualityR = false;
+  filterQualityR = true;
   showDuplicates = false;
   showRejected = false;
   showStale = true;
 
   private destroy$ = new Subject<void>();
+  private pollInterval: any;
 
   constructor(
     private supabaseService: SupabaseService,
@@ -907,7 +892,13 @@ export class Screener implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.fetchData(true);
+    this.fetchData();
+
+    this.pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        this.fetchData(false);
+      }
+    }, 15000);
   }
 
   fetchData(showSpinner = true): void {
@@ -924,9 +915,8 @@ export class Screener implements OnInit, OnDestroy {
             }
             return s;
           }).filter(s => !!s.symbol && (
-            s.strategy_name === 'golden_death_cross' || 
-            s.strategy_name === 'goldencross' ||
-            s.group_name?.startsWith('GoldenCross -')
+            s.strategy_name === 'osob_reversion' || 
+            s.group_name?.startsWith('OSOB')
           ));
           
           this.applyFilters();
@@ -934,7 +924,7 @@ export class Screener implements OnInit, OnDestroy {
           this.cdr.detectChanges();
         },
         error: (err) => {
-          console.error('Error loading GoldenCross setups:', err);
+          console.error('Error loading Osob setups:', err);
           this.loading = false;
           this.cdr.detectChanges();
         }
@@ -953,7 +943,9 @@ export class Screener implements OnInit, OnDestroy {
 
   isPenalty(r: string): boolean {
     if (!r) return false;
-    return r.trim().startsWith('-');
+    if (r.trim().startsWith('-')) return true;
+    const lower = r.toLowerCase();
+    return lower.includes('penalty') || lower.includes('chop') || lower.includes('extended') || lower.includes('low volume');
   }
 
   translateReason(r: string, mode?: string): string {
@@ -994,12 +986,11 @@ export class Screener implements OnInit, OnDestroy {
     const result: { icon: string, text: string }[] = [];
     
     const coreKeys = [
-      { key: 'Base Setup', text: isBearish ? 'In bearish trend' : 'In bullish trend' },
-      { key: 'EMA Trend Alignment', text: isBearish ? 'Below EMAs' : 'Above EMAs' },
-      { key: 'VWAP Alignment', text: 'Price near VWAP' },
-      { key: 'Volume Expansion', text: 'High trading volume' },
-      { key: isBearish ? 'Near Daily Low Breakdown' : 'Near Daily High Breakout', 
-        text: isBearish ? 'Dropping below daily low.' : 'Pushing above daily high.' }
+      { key: 'OSOB Condition', text: isBearish ? 'Price rallied too fast' : 'Price dropped too fast' },
+      { key: 'Reversal Pattern', text: 'Reversal candle spotted' },
+      { key: 'Volume Climax', text: 'Heavy trading volume' },
+      { key: 'Key Level', text: isBearish ? 'At major resistance ceiling' : 'At major support floor' },
+      { key: 'Trend Exhaustion', text: 'Momentum slowing down' }
     ];
 
     const matchedIndices = new Set<number>();
@@ -1009,9 +1000,9 @@ export class Screener implements OnInit, OnDestroy {
       if (foundIdx !== -1) {
         matchedIndices.add(foundIdx);
         let displayText = core.text;
-        if (core.key === 'Volume Expansion') {
+        if (core.key === 'Volume Climax') {
            const match = reasons[foundIdx].match(/RVOL [\d.]+/);
-           if (match) displayText = `High trading volume (${match[0]})`;
+           if (match) displayText = `Heavy trading volume (${match[0]})`;
         }
         result.push({ icon: '🟢', text: displayText });
       } else {
@@ -1024,13 +1015,7 @@ export class Screener implements OnInit, OnDestroy {
         const isPen = r.trim().startsWith('-');
         const icon = isPen ? '🔴' : '🟢';
         let baseText = r.replace(/^[+-]?\d+\s*/, '').trim();
-        
-        const translations: { [key: string]: string } = {
-          'Premarket Low Volume': 'Low premarket activity.',
-          'Extended from VWAP': 'Price extended from average.',
-          'Strong Momentum': 'Strong market momentum.'
-        };
-        const text = translations[baseText] || baseText;
+        const text = baseText;
         result.push({ icon, text });
       }
     });
@@ -1042,7 +1027,6 @@ export class Screener implements OnInit, OnDestroy {
     switch (status?.toLowerCase()) {
       case 'fresh': return 'F';
       case 'watch': return 'W';
-      case 'closed': return '❌';
       case 'stale': return 'S';
       case 'expired': return 'X';
       case 'rejected': return 'R';
@@ -1113,7 +1097,7 @@ export class Screener implements OnInit, OnDestroy {
 
     // Stale/Expired status filter
     if (!this.showStale) {
-      filtered = filtered.filter(s => s.status !== 'stale' && s.status !== 'expired' && s.status !== 'closed');
+      filtered = filtered.filter(s => s.status !== 'stale' && s.status !== 'expired');
     }
 
     // Dynamic Column Sorting
@@ -1197,5 +1181,8 @@ export class Screener implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+    }
   }
 }

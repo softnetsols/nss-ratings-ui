@@ -742,7 +742,7 @@ exports.handler = async (event, context) => {
       const flat = payload.flat || [];
       processItems(bullish, 'bullish');
       processItems(bearish, 'bearish');
-      processItems(flat, 'flat');
+      // processItems(flat, 'flat'); // Handled separately below to close existing active signals
     }
     // ── END SCHEMA ROUTING ────────────────────────────────────────────────
 
@@ -768,6 +768,41 @@ exports.handler = async (event, context) => {
 
       const activeSignals = existingSignals || [];
       const auxiliaryUpdates = [];
+
+      // --- ADDED FOR FLAT CLOSURES ---
+      const flatSymbols = (payload.flat || []).map(item => item.s || item.sym || item.symbol).filter(Boolean);
+      let activeSignalsToClose = [];
+      if (flatSymbols.length > 0) {
+        const { data: openSignals } = await supabase
+          .from('screener_signals')
+          .select('*')
+          .in('symbol', flatSymbols)
+          .in('status', ['fresh', 'watch', 'stale']);
+        activeSignalsToClose = openSignals || [];
+      }
+
+      for (const flatItem of (payload.flat || [])) {
+        const sym = flatItem.s || flatItem.sym || flatItem.symbol;
+        const reasonsStr = flatItem.rs !== undefined ? String(flatItem.rs) : (flatItem.score_reasons !== undefined ? String(flatItem.score_reasons) : "");
+        const flatReasons = reasonsStr ? reasonsStr.split(',').map(r => r.replace(/['"]/g, '').trim()).filter(Boolean) : [];
+        
+        const signalToClose = activeSignalsToClose.find(s => s.symbol === sym);
+        if (signalToClose) {
+          const currentReasons = signalToClose.score_reasons || [];
+          const updatedReasons = [...new Set([...currentReasons, ...flatReasons, 'Closed by Signal'])];
+          
+          auxiliaryUpdates.push({
+            signal_id: signalToClose.signal_id,
+            data: { 
+              status: 'closed', 
+              score_reasons: updatedReasons,
+              updated_at: new Date().toISOString(),
+              current_price_updated_at: new Date().toISOString()
+            }
+          });
+        }
+      }
+      // -------------------------------
 
       // Process duplicate and confirmation checks
       for (const row of rows) {
@@ -909,7 +944,7 @@ exports.handler = async (event, context) => {
 
       // 2. Process auxiliary updates from duplicate/conflict checks
       for (const aux of auxiliaryUpdates) {
-        const existing = activeSignals.find(s => s.signal_id === aux.signal_id);
+        const existing = activeSignals.find(s => s.signal_id === aux.signal_id) || (typeof activeSignalsToClose !== 'undefined' ? activeSignalsToClose.find(s => s.signal_id === aux.signal_id) : undefined);
         if (existing) {
           // Merge with any values already staged in this batch, or fall back to DB values
           const currentVal = upsertRows.get(aux.signal_id) || existing;

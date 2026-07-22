@@ -102,7 +102,7 @@ import { SupabaseService } from '../../services/supabase.service';
                     </span>
                   </td>
                   <td>
-                    <span class="grade-text" [class]="'quality-' + s.signal_quality.toLowerCase()">
+                    <span class="grade-text" [class]="'quality-' + (s.signal_quality ? s.signal_quality.toLowerCase() : 'reject')">
                       {{ s.signal_score }} ({{ s.signal_quality }})
                     </span>
                   </td>
@@ -124,7 +124,10 @@ import { SupabaseService } from '../../services/supabase.service';
 
                     <div *ngIf="openReasonsFor === s.symbol" class="reasons-popover" (click)="$event.stopPropagation()">
                       <div class="popover-content">
-                        <pre>{{ s.score_reasons?.join('\n') || '-' }}</pre>
+                        <div *ngFor="let item of getDisplayReasons(s)" class="translated-reason">
+                          <span class="reason-icon">{{ item.icon }}</span>
+                          <span class="reason-text">{{ item.text }}</span>
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -136,11 +139,7 @@ import { SupabaseService } from '../../services/supabase.service';
             </table>
           </div>
           <!-- Pagination Control -->
-          <div class="pagination-bar" *ngIf="totalBullishPages > 1">
-            <button class="pag-btn" (click)="prevBullishPage()" [disabled]="bullishPage === 1">◀ Prev</button>
-            <span class="pag-info">Page {{ bullishPage }} of {{ totalBullishPages }}</span>
-            <button class="pag-btn" (click)="nextBullishPage()" [disabled]="bullishPage === totalBullishPages">Next ▶</button>
-          </div>
+          
         </div>
 
         <!-- Bearish Table -->
@@ -177,7 +176,7 @@ import { SupabaseService } from '../../services/supabase.service';
                     </span>
                   </td>
                   <td>
-                    <span class="grade-text" [class]="'quality-' + s.signal_quality.toLowerCase()">
+                    <span class="grade-text" [class]="'quality-' + (s.signal_quality ? s.signal_quality.toLowerCase() : 'reject')">
                       {{ s.signal_score }} ({{ s.signal_quality }})
                     </span>
                   </td>
@@ -199,7 +198,10 @@ import { SupabaseService } from '../../services/supabase.service';
 
                     <div *ngIf="openReasonsFor === s.symbol" class="reasons-popover" (click)="$event.stopPropagation()">
                       <div class="popover-content">
-                        <pre>{{ s.score_reasons?.join('\n') || '-' }}</pre>
+                        <div *ngFor="let item of getDisplayReasons(s)" class="translated-reason">
+                          <span class="reason-icon">{{ item.icon }}</span>
+                          <span class="reason-text">{{ item.text }}</span>
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -211,11 +213,7 @@ import { SupabaseService } from '../../services/supabase.service';
             </table>
           </div>
           <!-- Pagination Control -->
-          <div class="pagination-bar" *ngIf="totalBearishPages > 1">
-            <button class="pag-btn" (click)="prevBearishPage()" [disabled]="bearishPage === 1">◀ Prev</button>
-            <span class="pag-info">Page {{ bearishPage }} of {{ totalBearishPages }}</span>
-            <button class="pag-btn" (click)="nextBearishPage()" [disabled]="bearishPage === totalBearishPages">Next ▶</button>
-          </div>
+          
         </div>
 
       </div>
@@ -456,9 +454,9 @@ import { SupabaseService } from '../../services/supabase.service';
       background: rgba(248, 113, 113, 0.08);
       color: #f87171; /* Pastel rose red */
     }
-    .table-scroll {
-      overflow-x: auto;
-    }
+    .table-scroll { overflow-x: auto; overflow-y: auto; flex-grow: 1; max-height: calc(100vh - 350px); background: rgba(30, 41, 59, 0.5); border-radius: 6px; }
+    .table-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+    .table-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.2); border-radius: 4px; }
 
     /* Compact Dark Table styling */
     .screener-table {
@@ -668,12 +666,27 @@ import { SupabaseService } from '../../services/supabase.service';
       background: #0b1220;
       border: 1px solid #23303a;
       border-radius: 6px;
-      padding: 8px;
-      min-width: 200px;
-      max-width: 360px;
+      padding: 10px 12px;
+      min-width: 180px;
+      max-width: 240px;
       box-shadow: 0 6px 18px rgba(2,6,23,0.6);
     }
-    .reasons-popover pre { margin: 0; white-space: pre-wrap; color: #cbd5e1; font-size: 0.72rem; }
+    .translated-reason {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      font-size: 0.75rem;
+      color: #cbd5e1;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    .translated-reason:last-child {
+      margin-bottom: 0;
+    }
+    .reason-icon {
+      font-size: 0.65rem;
+      margin-top: 2px;
+    }
 
     /* Pagination CSS */
     .pagination-bar {
@@ -853,9 +866,7 @@ export class AlphaTrend implements OnInit, OnDestroy {
   openReasonsFor: string | null = null;
 
   // Pagination parameters
-  bullishPage = 1;
-  bearishPage = 1;
-  pageSize = 20;
+  
 
   // Sorting: Default to time bar descending (latest first)
   sortKey = 'signal_bar_time';
@@ -866,6 +877,7 @@ export class AlphaTrend implements OnInit, OnDestroy {
   filterQualityA = true;
   filterQualityB = true;
   filterQualityC = false;
+  filterQualityR = true;
   showDuplicates = false;
   showRejected = false;
   showStale = true;
@@ -896,12 +908,17 @@ export class AlphaTrend implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (data) => {
-          this.allSetups = data.filter(s => 
+          this.allSetups = data.map(s => {
+            if (typeof s.score_reasons === 'string') {
+              try { s.score_reasons = JSON.parse(s.score_reasons); } catch(e) { s.score_reasons = []; }
+            }
+            return s;
+          }).filter(s => !!s.symbol && (
             s.strategy_name === 'alphatrend_reversal' || 
-            s.group_name.startsWith('AlphaTrend -')
-          );
+            s.group_name?.startsWith('AlphaTrend -')
+          ));
           
-          this.applyFilters(true);
+          this.applyFilters();
           this.loading = false;
           this.cdr.detectChanges();
         },
@@ -920,12 +937,96 @@ export class AlphaTrend implements OnInit, OnDestroy {
       this.sortKey = key;
       this.sortAsc = false;
     }
-    this.applyFilters(true);
+    this.applyFilters();
   }
 
-  isPenalty(reason: string): boolean {
-    const r = reason.toLowerCase();
-    return r.includes('penalty') || r.includes('chop') || r.includes('extended') || r.includes('low volume');
+  isPenalty(r: string): boolean {
+    if (!r) return false;
+    if (r.trim().startsWith('-')) return true;
+    const lower = r.toLowerCase();
+    return lower.includes('penalty') || lower.includes('chop') || lower.includes('extended') || lower.includes('low volume');
+  }
+
+  translateReason(r: string, mode?: string): string {
+    if (!r) return '';
+    let baseText = r.replace(/^[+-]?\d+\s*/, '').trim();
+    
+    if (baseText.includes('Volume Expansion')) {
+      const match = baseText.match(/RVOL [\d.]+/);
+      return `High trading volume (${match ? match[0] : 'High'})`;
+    }
+    if (baseText.includes('VWAP Alignment')) {
+      return 'Price near VWAP';
+    }
+
+    const isBearish = mode && mode.toLowerCase().includes('bear');
+
+    if (baseText === 'Base Setup') {
+      return isBearish ? 'In bearish trend' : 'In bullish trend';
+    }
+    if (baseText === 'EMA Trend Alignment') {
+      return isBearish ? 'Below EMAs' : 'Above EMAs';
+    }
+    
+    const translations: { [key: string]: string } = {
+      'Near Daily High Breakout': 'Pushing above daily high.',
+      'Near Daily Low Breakdown': 'Dropping below daily low.',
+      'Premarket Low Volume': 'Low premarket activity.',
+      'Extended from VWAP': 'Price extended from average.',
+      'Strong Momentum': 'Strong market momentum.'
+    };
+
+    return translations[baseText] || baseText;
+  }
+
+  getDisplayReasons(s: any): { icon: string, text: string }[] {
+    const reasons = s.score_reasons || [];
+    const isBearish = s.signal_mode && s.signal_mode.toLowerCase().includes('bear');
+    const result: { icon: string, text: string }[] = [];
+    
+    const coreKeys = [
+      { key: 'Base Setup', text: isBearish ? 'In bearish trend' : 'In bullish trend' },
+      { key: 'EMA Trend Alignment', text: isBearish ? 'Below EMAs' : 'Above EMAs' },
+      { key: 'VWAP Alignment', text: 'Price near VWAP' },
+      { key: 'Volume Expansion', text: 'High trading volume' },
+      { key: isBearish ? 'Near Daily Low Breakdown' : 'Near Daily High Breakout', 
+        text: isBearish ? 'Dropping below daily low.' : 'Pushing above daily high.' }
+    ];
+
+    const matchedIndices = new Set<number>();
+
+    coreKeys.forEach(core => {
+      const foundIdx = reasons.findIndex((r: string) => r.includes(core.key));
+      if (foundIdx !== -1) {
+        matchedIndices.add(foundIdx);
+        let displayText = core.text;
+        if (core.key === 'Volume Expansion') {
+           const match = reasons[foundIdx].match(/RVOL [\d.]+/);
+           if (match) displayText = `High trading volume (${match[0]})`;
+        }
+        result.push({ icon: '🟢', text: displayText });
+      } else {
+        result.push({ icon: '🔴', text: core.text });
+      }
+    });
+
+    reasons.forEach((r: string, idx: number) => {
+      if (!matchedIndices.has(idx)) {
+        const isPen = r.trim().startsWith('-');
+        const icon = isPen ? '🔴' : '🟢';
+        let baseText = r.replace(/^[+-]?\d+\s*/, '').trim();
+        
+        const translations: { [key: string]: string } = {
+          'Premarket Low Volume': 'Low premarket activity.',
+          'Extended from VWAP': 'Price extended from average.',
+          'Strong Momentum': 'Strong market momentum.'
+        };
+        const text = translations[baseText] || baseText;
+        result.push({ icon, text });
+      }
+    });
+
+    return result;
   }
 
   getStatusShortCode(status: string): string {
@@ -942,41 +1043,9 @@ export class AlphaTrend implements OnInit, OnDestroy {
   }
 
   // Getters for Pagination bounds
-  get totalBullishPages(): number {
-    return Math.ceil(this.totalBullish / this.pageSize) || 1;
-  }
+  
 
-  get totalBearishPages(): number {
-    return Math.ceil(this.totalBearish / this.pageSize) || 1;
-  }
-
-  prevBullishPage(): void {
-    if (this.bullishPage > 1) {
-      this.bullishPage--;
-      this.applyFilters(false);
-    }
-  }
-
-  nextBullishPage(): void {
-    if (this.bullishPage < this.totalBullishPages) {
-      this.bullishPage++;
-      this.applyFilters(false);
-    }
-  }
-
-  prevBearishPage(): void {
-    if (this.bearishPage > 1) {
-      this.bearishPage--;
-      this.applyFilters(false);
-    }
-  }
-
-  nextBearishPage(): void {
-    if (this.bearishPage < this.totalBearishPages) {
-      this.bearishPage++;
-      this.applyFilters(false);
-    }
-  }
+  
 
   toggleReasons(s: any, event: Event): void {
     event.stopPropagation();
@@ -991,11 +1060,7 @@ export class AlphaTrend implements OnInit, OnDestroy {
     this.openReasonsFor = null;
   }
 
-  applyFilters(resetPages = true): void {
-    if (resetPages) {
-      this.bullishPage = 1;
-      this.bearishPage = 1;
-    }
+  applyFilters(): void {
 
     let filtered = this.allSetups;
 
@@ -1022,7 +1087,7 @@ export class AlphaTrend implements OnInit, OnDestroy {
       if (s.signal_quality === 'A' && !this.filterQualityA) return false;
       if (s.signal_quality === 'B' && !this.filterQualityB) return false;
       if (s.signal_quality === 'C' && !this.filterQualityC) return false;
-      if ((s.signal_quality === 'R' || s.signal_quality === 'Reject') && !this.showRejected) return false;
+      if ((s.signal_quality === 'R' || s.signal_quality === 'Reject') && !this.filterQualityR) return false;
       return true;
     });
 
@@ -1078,12 +1143,8 @@ export class AlphaTrend implements OnInit, OnDestroy {
     this.totalBullish = bullishList.length;
     this.totalBearish = bearishList.length;
 
-    // Apply Client-Side Pagination Slicing (20 rows per page)
-    const startBull = (this.bullishPage - 1) * this.pageSize;
-    this.filteredBullish = bullishList.slice(startBull, startBull + this.pageSize);
-
-    const startBear = (this.bearishPage - 1) * this.pageSize;
-    this.filteredBearish = bearishList.slice(startBear, startBear + this.pageSize);
+    this.filteredBullish = bullishList;
+    this.filteredBearish = bearishList;
   }
 
   getMovePct(card: any): number {
@@ -1112,7 +1173,8 @@ export class AlphaTrend implements OnInit, OnDestroy {
   formatPrice(price: any, symbol: string): string {
     if (price === undefined || price === null || isNaN(Number(price))) return '-';
     const p = Number(price);
-    const isCryptoOrFutures = symbol.includes('1!') || symbol.includes('BTC') || symbol.includes('GC') || symbol.includes('SI') || symbol.includes('CL') || symbol.includes('USOIL') || p < 5.0;
+    const symStr = symbol ? String(symbol) : '';
+    const isCryptoOrFutures = symStr.includes('1!') || symStr.includes('BTC') || symStr.includes('GC') || symStr.includes('SI') || symStr.includes('CL') || symStr.includes('USOIL') || p < 5.0;
     if (isCryptoOrFutures) {
       if (p === 0) return '0.00';
       if (p < 0.1) return p.toFixed(5);
