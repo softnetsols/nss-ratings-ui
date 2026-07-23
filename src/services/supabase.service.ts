@@ -63,4 +63,25 @@ export class SupabaseService {
       return data ?? [];
     }));
   }
+
+  getSmartTrendDailyPerformance(days: number, groupName = 'ALL'): Observable<any[]> {
+    let query = this.supabase
+      .from('smarttrend_daily_performance')
+      .select('*')
+      .eq('strategy_name', 'smarttrend_core')
+      .eq('group_name', groupName)
+      .order('trade_date', { ascending: false });
+
+    if (days > 0) {
+      query = query.limit(days);
+    }
+
+    return from(query.then(({ data, error }) => {
+      if (error) {
+        console.error('Supabase performance fetch error:', error);
+        throw error;
+      }
+      return data ?? [];
+    }));
+  }
 }

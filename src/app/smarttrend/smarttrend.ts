@@ -1,12 +1,13 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule, DecimalPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Subject, takeUntil, interval, Observable, from } from 'rxjs';
-import { mergeMap } from 'rxjs/operators';
 import { SupabaseService } from '../../services/supabase.service';
+import { MarketDataService, MarketQuote } from '../../services/market-data.service';
 
-interface NormalizedSignal {
+export interface NormalizedSignal {
   signal_id: string;
   symbol: string;
   group_name: string;
@@ -57,7 +58,7 @@ interface NormalizedSignal {
   exitPrice: number | null;
 }
 
-interface SmartTrendTrade {
+export interface SmartTrendTrade {
   tradeId: string;
   open?: NormalizedSignal;
   close?: NormalizedSignal;
@@ -73,8 +74,14 @@ interface SmartTrendTrade {
   quantity?: number;
   plPerShare?: number;
   paperPl?: number;
+  unrealizedPaperPl?: number;
+  tradeCapital?: number;
   modeledExitPrice?: number | null;
   fillBasis?: 'TARGET_LEVEL' | 'STOP_LEVEL' | 'EVENT_PRICE' | 'UNKNOWN';
+  livePrice?: number;
+  livePriceUpdatedAt?: number;
+  quoteStatus?: 'LIVE' | 'STALE' | 'UNAVAILABLE' | 'ERROR';
+  touchState?: 'NONE' | 'TARGET_TOUCHED' | 'STOP_TOUCHED';
 }
 
 @Component({
@@ -91,16 +98,34 @@ interface SmartTrendTrade {
     <div class="screener-container">
       <div class="screener-header">
         <div style="display: flex; flex-direction: column; gap: 4px;">
-          <h2 style="display: flex; align-items: center; gap: 10px;">
+          <h2 style="display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1.35rem; color: #fff;">
             SmartTrend Core — Experimental Paper Test
             <span class="warning-badge">PAPER TEST ONLY — Backtest Not Yet Profitable</span>
           </h2>
+          
+          <!-- Authoritative Allocation Control -->
           <div class="allocation-control" style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
             <label style="font-size: 0.75rem; color: #9ca3af;">Paper Allocation / Trade:</label>
             <span style="color: #9ca3af; font-size: 0.75rem;">$</span>
-            <input type="number" [(ngModel)]="paperAllocation" (ngModelChange)="onAllocationChange()" min="100" class="alloc-input" style="width: 80px; background: #0f1115; border: 1px solid #27272a; color: #e5e7eb; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem;" />
+            <input type="number" [(ngModel)]="paperAllocation" min="100" class="alloc-input" 
+                   style="width: 80px; background: #0f1115; border: 1px solid #27272a; color: #e5e7eb; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem;" 
+                   [disabled]="allocationLocked" />
+            
+            <ng-container *ngIf="!allocationLocked">
+              <input type="password" [(ngModel)]="webhookSecret" placeholder="Secret Key" 
+                     style="width: 90px; background: #0f1115; border: 1px solid #27272a; color: #e5e7eb; border-radius: 4px; padding: 2px 6px; font-size: 0.65rem;" />
+              <button (click)="savePaperAllocation()" 
+                      style="background: #2563eb; color: white; border: none; border-radius: 4px; padding: 2px 8px; font-size: 0.65rem; cursor: pointer;">
+                Save
+              </button>
+            </ng-container>
+
+            <span *ngIf="allocationLocked" style="font-size: 0.7rem; color: #fbbf24; background: rgba(245,158,11,0.06); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(245,158,11,0.15);">
+              ⚠️ Today's allocation is locked at \${{ lockedAllocation | number: '1.2-2' }}. Changes apply next trading day.
+            </span>
           </div>
         </div>
+
         <div style="display: flex; align-items: center; gap: 12px;">
           <button class="manual-refresh-btn" (click)="fetchData(true)" [disabled]="loading">
             🔄 {{ loading ? 'Refreshing...' : 'Refresh' }}
@@ -110,6 +135,38 @@ interface SmartTrendTrade {
           </span>
           <span class="last-updated" *ngIf="lastUpdated">
             Last updated: {{ lastUpdated }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Capital & Performance Summary Dashboard (Section 15 UI Addition) -->
+      <div class="metrics-dashboard" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
+        <div class="metric-box" style="background: #111317; border: 1px solid #1f2229; border-radius: 6px; padding: 12px; display: flex; flex-direction: column;">
+          <span style="font-size: 0.7rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">Active Capital Now</span>
+          <span style="font-size: 1.25rem; font-weight: bold; color: #e5e7eb; margin-top: 4px;">\${{ activeCapitalNow | number: '1.2-2' }}</span>
+        </div>
+        <div class="metric-box" style="background: #111317; border: 1px solid #1f2229; border-radius: 6px; padding: 12px; display: flex; flex-direction: column;">
+          <span style="font-size: 0.7rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">Gross Deployed Today</span>
+          <span style="font-size: 1.25rem; font-weight: bold; color: #e5e7eb; margin-top: 4px;">\${{ grossCapitalDeployedToday | number: '1.2-2' }}</span>
+        </div>
+        <div class="metric-box" style="background: #111317; border: 1px solid #1f2229; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; border-left: 3px solid #f59e0b;">
+          <span style="font-size: 0.7rem; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.05em;">Capital Needed Today (Peak)</span>
+          <span style="font-size: 1.25rem; font-weight: bold; color: #fbbf24; margin-top: 4px;">\${{ peakConcurrentCapitalToday | number: '1.2-2' }}</span>
+        </div>
+        <div class="metric-box" style="background: #111317; border: 1px solid #1f2229; border-radius: 6px; padding: 12px; display: flex; flex-direction: column;">
+          <span style="font-size: 0.7rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">Max Concurrent Trades</span>
+          <span style="font-size: 1.25rem; font-weight: bold; color: #e5e7eb; margin-top: 4px;">{{ maxConcurrentTradesToday }}</span>
+        </div>
+        <div class="metric-box" style="background: #111317; border: 1px solid #1f2229; border-radius: 6px; padding: 12px; display: flex; flex-direction: column;">
+          <span style="font-size: 0.7rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">Unrealized P/L Now</span>
+          <span style="font-size: 1.25rem; font-weight: bold; margin-top: 4px;" [class.positive]="unrealizedPaperPlNow > 0" [class.negative]="unrealizedPaperPlNow < 0">
+            \${{ unrealizedPaperPlNow | number: '1.2-2' }}
+          </span>
+        </div>
+        <div class="metric-box" style="background: #111317; border: 1px solid #1f2229; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; border-left: 3px solid #2563eb;">
+          <span style="font-size: 0.7rem; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.05em;">Net Paper P/L Today</span>
+          <span style="font-size: 1.25rem; font-weight: bold; margin-top: 4px;" [class.positive]="netPaperPlToday > 0" [class.negative]="netPaperPlToday < 0">
+            \${{ netPaperPlToday | number: '1.2-2' }}
           </span>
         </div>
       </div>
@@ -132,7 +189,7 @@ interface SmartTrendTrade {
           <span class="card-val" [class.positive]="paperPlToday > 0" [class.negative]="paperPlToday < 0">
             \${{ paperPlToday | number: '1.2-2' }}
           </span>
-          <span class="card-lbl">Paper P/L Today</span>
+          <span class="card-lbl">Realized P/L Today</span>
         </div>
         <div class="summary-card">
           <span class="card-val" style="color: #4ade80;">{{ winningTradesToday }}</span>
@@ -169,38 +226,48 @@ interface SmartTrendTrade {
         <div class="search-box">
           <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="applyFilters()" placeholder="Search symbols, actions, trade IDs, sources, reasons..." class="search-input" />
         </div>
-        <div class="filters-row">
-          <!-- Views -->
-          <div class="filter-group">
-            <span class="group-label">View:</span>
-            <label class="checkbox-label">
-              <input type="checkbox" [(ngModel)]="viewActive" (change)="applyFilters()" /> Active
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" [(ngModel)]="viewClosedToday" (change)="applyFilters()" /> Closed Today
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" [(ngModel)]="viewOlderHistory" (change)="applyFilters()" /> Older History
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" [(ngModel)]="viewOrphanExits" (change)="applyFilters()" /> Orphan Exits
-            </label>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 12px;">
+          <div class="filters-row" style="flex: 1; min-width: 300px; border-bottom: none; margin: 0; padding: 0;">
+            <!-- Views -->
+            <div class="filter-group">
+              <span class="group-label">View:</span>
+              <label class="checkbox-label">
+                <input type="checkbox" [(ngModel)]="viewActive" (change)="applyFilters()" /> Active
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" [(ngModel)]="viewClosedToday" (change)="applyFilters()" /> Closed Today
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" [(ngModel)]="viewOlderHistory" (change)="applyFilters()" /> Older History
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" [(ngModel)]="viewOrphanExits" (change)="applyFilters()" /> Orphan Exits
+              </label>
+            </div>
+
+            <!-- Actions -->
+            <div class="filter-group">
+              <span class="group-label">Action:</span>
+              <label class="checkbox-label">
+                <input type="checkbox" [(ngModel)]="actionBuy" (change)="applyFilters()" /> BUY
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" [(ngModel)]="actionShort" (change)="applyFilters()" /> SHORT
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" [(ngModel)]="actionExitLong" (change)="applyFilters()" /> EXIT LONG
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" [(ngModel)]="actionExitShort" (change)="applyFilters()" /> EXIT SHORT
+              </label>
+            </div>
           </div>
 
-          <!-- Actions -->
-          <div class="filter-group">
-            <span class="group-label">Action:</span>
-            <label class="checkbox-label">
-              <input type="checkbox" [(ngModel)]="actionBuy" (change)="applyFilters()" /> BUY
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" [(ngModel)]="actionShort" (change)="applyFilters()" /> SHORT
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" [(ngModel)]="actionExitLong" (change)="applyFilters()" /> EXIT LONG
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" [(ngModel)]="actionExitShort" (change)="applyFilters()" /> EXIT SHORT
+          <!-- Test Data Filter Toggles (Section 15 requirement) -->
+          <div class="filter-group" style="margin: 0; border: 1px dashed #27272a; padding: 4px 10px; border-radius: 4px; background: rgba(0,0,0,0.15);">
+            <label class="checkbox-label" style="font-weight: bold; color: #a1a1aa; cursor: pointer;">
+              <input type="checkbox" [(ngModel)]="showTestData" (change)="onShowTestDataChange()" /> Show Test Data (STDEMO)
             </label>
           </div>
         </div>
@@ -464,6 +531,122 @@ interface SmartTrendTrade {
 
       </div>
 
+      <!-- Historical Performance Section (Section 15 requirement) -->
+      <div class="historical-section" style="margin-top: 24px; background: #161a22; border: 1px solid #27272a; border-radius: 8px; padding: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2d3139; padding-bottom: 10px; margin-bottom: 16px;">
+          <h3 style="margin: 0; font-size: 1rem; color: #e5e7eb; display: flex; align-items: center; gap: 8px;">
+            📊 Daily Performance History
+          </h3>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <select [(ngModel)]="selectedDays" (change)="fetchHistoricalPerformance()" style="background: #0f1115; border: 1px solid #27272a; color: #e5e7eb; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">
+              <option [value]="7">Last 7 Days</option>
+              <option [value]="30">Last 30 Days</option>
+              <option [value]="90">Last 90 Days</option>
+              <option [value]="365">Last 365 Days</option>
+            </select>
+            <button (click)="exportHistoryCSV()" style="background: #1e293b; color: #cbd5e1; border: 1px solid #334155; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              📥 Export CSV
+            </button>
+          </div>
+        </div>
+
+        <!-- Historical Summary Cards -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px;">
+          <div style="background: #0f1115; border: 1px solid #1f2229; border-radius: 4px; padding: 10px; text-align: center;">
+            <span style="font-size: 0.65rem; color: #9ca3af; display: block;">Total Realized P/L</span>
+            <span style="font-size: 1rem; font-weight: bold; display: block; margin-top: 2px;" [class.positive]="historySummary.totalRealized > 0" [class.negative]="historySummary.totalRealized < 0">
+              \${{ historySummary.totalRealized | number: '1.2-2' }}
+            </span>
+          </div>
+          <div style="background: #0f1115; border: 1px solid #1f2229; border-radius: 4px; padding: 10px; text-align: center;">
+            <span style="font-size: 0.65rem; color: #9ca3af; display: block;">Overall Win Rate</span>
+            <span style="font-size: 1rem; font-weight: bold; color: #e5e7eb; display: block; margin-top: 2px;">
+              {{ historySummary.winRate | number: '1.1-1' }}%
+            </span>
+          </div>
+          <div style="background: #0f1115; border: 1px solid #1f2229; border-radius: 4px; padding: 10px; text-align: center;">
+            <span style="font-size: 0.65rem; color: #9ca3af; display: block;">Profit Factor</span>
+            <span style="font-size: 1rem; font-weight: bold; color: #e5e7eb; display: block; margin-top: 2px;">
+              {{ historySummary.profitFactor !== null ? (historySummary.profitFactor | number: '1.2-2') : 'N/A' }}
+            </span>
+          </div>
+          <div style="background: #0f1115; border: 1px solid #1f2229; border-radius: 4px; padding: 10px; text-align: center;">
+            <span style="font-size: 0.65rem; color: #9ca3af; display: block;">Closed Trades</span>
+            <span style="font-size: 1rem; font-weight: bold; color: #e5e7eb; display: block; margin-top: 2px;">
+              {{ historySummary.totalClosed }}
+            </span>
+          </div>
+          <div style="background: #0f1115; border: 1px solid #1f2229; border-radius: 4px; padding: 10px; text-align: center;">
+            <span style="font-size: 0.65rem; color: #9ca3af; display: block;">Avg Daily P/L</span>
+            <span style="font-size: 1rem; font-weight: bold; display: block; margin-top: 2px;" [class.positive]="historySummary.avgDailyPl > 0" [class.negative]="historySummary.avgDailyPl < 0">
+              \${{ historySummary.avgDailyPl | number: '1.2-2' }}
+            </span>
+          </div>
+          <div style="background: #0f1115; border: 1px solid #1f2229; border-radius: 4px; padding: 10px; text-align: center;">
+            <span style="font-size: 0.65rem; color: #9ca3af; display: block;">Best / Worst Day</span>
+            <span style="font-size: 0.75rem; font-weight: bold; display: block; margin-top: 2px;">
+              <span class="positive">\${{ historySummary.bestDay | number: '1.0-0' }}</span> / 
+              <span class="negative">\${{ historySummary.worstDay | number: '1.0-0' }}</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- History Table -->
+        <div style="overflow-x: auto;">
+          <table class="screener-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Ver</th>
+                <th style="text-align: center;">Trades</th>
+                <th style="text-align: center;">W / L</th>
+                <th style="text-align: center;">Win %</th>
+                <th style="text-align: center;">T / S / X / E</th>
+                <th style="text-align: right;">Gross Deployed</th>
+                <th style="text-align: right;">Peak Capital</th>
+                <th style="text-align: right;">Realized P/L</th>
+                <th style="text-align: right;">Return %</th>
+                <th style="text-align: center;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of historicalHistory">
+                <td style="font-family: monospace; font-weight: bold;">{{ row.trade_date }}</td>
+                <td style="font-size: 0.7rem; color: #9ca3af;">{{ row.strategy_version }}</td>
+                <td style="text-align: center;">{{ row.opened_trades }}</td>
+                <td style="text-align: center; color: #9ca3af;">
+                  {{ row.winning_trades }}W - {{ row.losing_trades }}L
+                </td>
+                <td style="text-align: center; font-weight: 500;">
+                  {{ row.win_rate_pct !== null ? (row.win_rate_pct | number: '1.1-1') + '%' : '--' }}
+                </td>
+                <td style="text-align: center; font-size: 0.7rem; color: #9ca3af;">
+                  {{ row.target_exits }}T / {{ row.stop_exits }}S / {{ row.structure_exits }}X / {{ row.eod_exits }}E
+                </td>
+                <td style="text-align: right; font-family: monospace;">\${{ row.gross_deployed_capital | number: '1.2-2' }}</td>
+                <td style="text-align: right; font-family: monospace;">\${{ row.peak_concurrent_capital | number: '1.2-2' }}</td>
+                <td style="text-align: right; font-family: monospace; font-weight: 500;" [class.positive]="row.realized_paper_pl > 0" [class.negative]="row.realized_paper_pl < 0">
+                  \${{ row.realized_paper_pl | number: '1.2-2' }}
+                </td>
+                <td style="text-align: right; font-family: monospace;" [class.positive]="row.return_on_peak_capital_pct > 0" [class.negative]="row.return_on_peak_capital_pct < 0">
+                  {{ row.return_on_peak_capital_pct !== null ? (row.return_on_peak_capital_pct | number: '1.2-2') + '%' : '--' }}
+                </td>
+                <td style="text-align: center;">
+                  <span style="font-size: 0.65rem; font-weight: bold; padding: 2px 6px; border-radius: 4px;" 
+                        [style.background]="row.is_final ? 'rgba(74, 222, 128, 0.08)' : 'rgba(245, 158, 11, 0.08)'"
+                        [style.color]="row.is_final ? '#4ade80' : '#fbbf24'">
+                    {{ row.is_final ? 'FINAL' : 'UNFINALIZED' }}
+                  </span>
+                </td>
+              </tr>
+              <tr *ngIf="historicalHistory.length === 0">
+                <td colspan="11" class="empty-row">No historical daily performance records found.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Trade Plan Details Modal Overlay -->
       <div class="modal-overlay" *ngIf="selectedTrade" (click)="closeModal()">
         <div class="modal-card" (click)="$event.stopPropagation()">
@@ -492,561 +675,518 @@ interface SmartTrendTrade {
                 <span class="detail-val">{{ selectedTrade.tradeId }}</span>
               </div>
               <div class="detail-row">
+                <span class="detail-label">State/Type:</span>
+                <span class="detail-val">{{ selectedTrade.type }}</span>
+              </div>
+              <div class="detail-row" *ngIf="selectedTrade.open">
                 <span class="detail-label">Entry Source:</span>
-                <span class="detail-val" [title]="getSourceExplanation(selectedTrade.open?.entrySource)">
-                  {{ selectedTrade.open?.entrySource || 'N/A' }}
-                </span>
+                <span class="detail-val">{{ selectedTrade.open.entrySource }}</span>
               </div>
               <div class="detail-row">
-                <span class="detail-label">Display Status:</span>
-                <span class="detail-val">{{ getStatusDisplay(getDerivedStatus(selectedTrade)) }}</span>
+                <span class="detail-label">Quantity (Paper):</span>
+                <span class="detail-val">{{ selectedTrade.quantity }} shares</span>
               </div>
               <div class="detail-row">
-                <span class="detail-label">Raw DB Status:</span>
-                <span class="detail-val">{{ selectedTrade.open?.status || selectedTrade.close?.status || 'N/A' }}</span>
+                <span class="detail-label">Notional Value:</span>
+                <span class="detail-val">\${{ selectedTrade.tradeCapital | number: '1.2-2' }}</span>
               </div>
               <div class="detail-row">
-                <span class="detail-label">Opened Time:</span>
-                <span class="detail-val">{{ selectedTrade.openedTime | date: 'yyyy-MM-dd hh:mm:ss a' }}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Entry Price:</span>
+                <span class="detail-label">Estimated Entry:</span>
                 <span class="detail-val">\${{ getEntryPrice(selectedTrade) | number: '1.2-2' }}</span>
               </div>
-              <div class="detail-row" *ngIf="selectedTrade.type === 'ACTIVE'">
-                <span class="detail-label">Current Price:</span>
-                <span class="detail-val">{{ getCurrentPriceDisplay(selectedTrade) }}</span>
-              </div>
-              <div class="detail-row" *ngIf="selectedTrade.type === 'ACTIVE'">
-                <span class="detail-label">Unrealized Move:</span>
-                <span class="detail-val pct-col" [class.positive]="selectedTrade.movePct >= 0" [class.negative]="selectedTrade.movePct < 0">
-                  {{ selectedTrade.movePct | number: '1.2-2' }}%
-                </span>
+              <div class="detail-row" *ngIf="selectedTrade.open?.stop_price">
+                <span class="detail-label">Stop Loss:</span>
+                <span class="detail-val" style="color: #f87171;">\${{ selectedTrade.open?.stop_price | number: '1.2-2' }}</span>
               </div>
               <div class="detail-row" *ngIf="selectedTrade.open">
-                <span class="detail-label">Stop Price:</span>
-                <span class="detail-val" style="color: #f87171;">\${{ selectedTrade.open.stop_price | number: '1.2-2' }}</span>
-              </div>
-              <div class="detail-row" *ngIf="selectedTrade.open">
-                <span class="detail-label">Target Price:</span>
+                <span class="detail-label">Target Level (T1):</span>
                 <span class="detail-val" style="color: #34d399;">\${{ getTargetPrice(selectedTrade.open) | number: '1.2-2' }}</span>
               </div>
-              <div class="detail-row" *ngIf="selectedTrade.open">
-                <span class="detail-label">EMA 9:</span>
-                <span class="detail-val">\${{ selectedTrade.open.ema9_at_signal | number: '1.2-2' }}</span>
+              <div class="detail-row" *ngIf="selectedTrade.type === 'ACTIVE'">
+                <span class="detail-label">FMP Live Price:</span>
+                <span class="detail-val">{{ getCurrentPriceDisplay(selectedTrade) }}</span>
               </div>
-              <div class="detail-row" *ngIf="selectedTrade.open">
-                <span class="detail-label">EMA 21:</span>
-                <span class="detail-val">\${{ selectedTrade.open.ema21_at_signal | number: '1.2-2' }}</span>
+              <div class="detail-row" *ngIf="selectedTrade.type === 'CLOSED'">
+                <span class="detail-label">Exit Price:</span>
+                <span class="detail-val" style="font-weight: bold;">\${{ selectedTrade.modeledExitPrice | number: '1.2-2' }}</span>
               </div>
-              <div class="detail-row" *ngIf="selectedTrade.open">
-                <span class="detail-label">VWAP:</span>
-                <span class="detail-val">\${{ selectedTrade.open.vwap_at_signal | number: '1.2-2' }}</span>
+              <div class="detail-row" *ngIf="selectedTrade.type === 'CLOSED'">
+                <span class="detail-label">Exit Reason:</span>
+                <span class="detail-val">{{ selectedTrade.close?.primaryReason || 'Unknown' }}</span>
               </div>
-              <div class="detail-row" *ngIf="selectedTrade.open">
-                <span class="detail-label">Position Before:</span>
-                <span class="detail-val">{{ selectedTrade.open.positionBefore }}</span>
+              <div class="detail-row" *ngIf="selectedTrade.type === 'CLOSED'">
+                <span class="detail-label">Fill Basis:</span>
+                <span class="detail-val">{{ selectedTrade.fillBasis }}</span>
               </div>
-              <div class="detail-row" *ngIf="selectedTrade.open">
-                <span class="detail-label">Position After:</span>
-                <span class="detail-val">{{ selectedTrade.open.positionAfter }}</span>
+              <div class="detail-row" *ngIf="selectedTrade.type === 'CLOSED'">
+                <span class="detail-label">Realized P/L:</span>
+                <span class="detail-val" [class.positive]="selectedTrade.paperPl !== undefined && selectedTrade.paperPl > 0" [class.negative]="selectedTrade.paperPl !== undefined && selectedTrade.paperPl < 0">
+                  \${{ selectedTrade.paperPl | number: '1.2-2' }} ({{ selectedTrade.resultPct | number: '1.2-2' }}%)
+                </span>
               </div>
-              <div class="detail-row" *ngIf="selectedTrade.open">
-                <span class="detail-label">Signal ID:</span>
-                <span class="detail-val">{{ selectedTrade.open.signal_id }}</span>
+              <div class="detail-row" *ngIf="selectedTrade.type === 'ACTIVE' && selectedTrade.unrealizedPaperPl !== undefined">
+                <span class="detail-label">Unrealized P/L:</span>
+                <span class="detail-val" [class.positive]="selectedTrade.unrealizedPaperPl > 0" [class.negative]="selectedTrade.unrealizedPaperPl < 0">
+                  \${{ selectedTrade.unrealizedPaperPl | number: '1.2-2' }} ({{ selectedTrade.movePct | number: '1.2-2' }}%)
+                </span>
               </div>
-
-              <!-- Closed trade specific fields -->
-              <ng-container *ngIf="selectedTrade.type === 'CLOSED' || selectedTrade.type === 'ORPHAN'">
-                <div class="detail-row">
-                  <span class="detail-label">Modeled Qty:</span>
-                  <span class="detail-val">{{ selectedTrade.quantity }} shares</span>
-                </div>
-                <div class="detail-row" *ngIf="selectedTrade.close">
-                  <span class="detail-label">Exit Action:</span>
-                  <span class="detail-val">{{ selectedTrade.close.action }}</span>
-                </div>
-                <div class="detail-row" *ngIf="selectedTrade.close">
-                  <span class="detail-label">Modeled Exit Price:</span>
-                  <span class="detail-val" style="font-weight: 600;">\${{ selectedTrade.modeledExitPrice | number: '1.2-2' }}</span>
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Fill Basis:</span>
-                  <span class="detail-val" [title]="getFillBasisExplanation(selectedTrade.fillBasis)" style="text-decoration: underline dotted; cursor: help;">
-                    {{ selectedTrade.fillBasis }}
-                  </span>
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">P/L Per Share:</span>
-                  <span class="detail-val" [class.positive]="selectedTrade.plPerShare !== undefined && selectedTrade.plPerShare > 0" [class.negative]="selectedTrade.plPerShare !== undefined && selectedTrade.plPerShare < 0">
-                    \${{ selectedTrade.plPerShare | number: '1.2-2' }}
-                  </span>
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Paper P/L Dollar:</span>
-                  <span class="detail-val" [class.positive]="selectedTrade.paperPl !== undefined && selectedTrade.paperPl > 0" [class.negative]="selectedTrade.paperPl !== undefined && selectedTrade.paperPl < 0" style="font-weight: 600;">
-                    \${{ selectedTrade.paperPl | number: '1.2-2' }}
-                  </span>
-                </div>
-                <div class="detail-row" *ngIf="selectedTrade.close">
-                  <span class="detail-label">Exit Reason:</span>
-                  <span class="detail-val" [title]="getReasonExplanation(selectedTrade.close.primaryReason)">
-                    {{ selectedTrade.close.primaryReason }}
-                  </span>
-                </div>
-                <div class="detail-row" *ngIf="selectedTrade.closedTime">
-                  <span class="detail-label">Closed Time:</span>
-                  <span class="detail-val">{{ selectedTrade.closedTime | date: 'yyyy-MM-dd hh:mm:ss a' }}</span>
-                </div>
-                <div class="detail-row" *ngIf="selectedTrade.holdTimeText">
-                  <span class="detail-label">Hold Time:</span>
-                  <span class="detail-val">{{ selectedTrade.holdTimeText }}</span>
-                </div>
-                <div class="detail-row" *ngIf="selectedTrade.resultPct !== undefined">
-                  <span class="detail-label">Realized Result:</span>
-                  <span class="detail-val pct-col" [class.positive]="selectedTrade.resultPct >= 0" [class.negative]="selectedTrade.resultPct < 0">
-                    {{ selectedTrade.resultPct | number: '1.2-2' }}%
-                  </span>
-                </div>
-              </ng-container>
+              <div class="detail-row" *ngIf="selectedTrade.openedTime">
+                <span class="detail-label">Opened At:</span>
+                <span class="detail-val">{{ selectedTrade.openedTime | date: 'yyyy-MM-dd HH:mm:ss z' }}</span>
+              </div>
+              <div class="detail-row" *ngIf="selectedTrade.closedTime">
+                <span class="detail-label">Closed At:</span>
+                <span class="detail-val">{{ selectedTrade.closedTime | date: 'yyyy-MM-dd HH:mm:ss z' }}</span>
+              </div>
             </div>
 
-            <div class="modal-footer-notes" style="margin-top: 14px; padding-top: 10px; border-top: 1px solid #27272a; font-size: 0.72rem; color: #9ca3af;">
-              <p *ngIf="selectedTrade.open?.entrySource">
-                <strong>Source:</strong> {{ getSourceExplanation(selectedTrade.open?.entrySource) }}
-              </p>
-              <p *ngIf="selectedTrade.close?.primaryReason">
-                <strong>Exit Reason:</strong> {{ getReasonExplanation(selectedTrade.close?.primaryReason) }}
-              </p>
-              <p style="font-style: italic; font-size: 0.65rem; color: #9ca3af; margin-top: 4px;">
-                * Paper P/L calculations are modeled estimations using configured price targets / stops or event receipt timestamps, and do not represent actual brokerage transactions or fills.
-              </p>
+            <div style="margin-top: 14px; border-top: 1px solid #22252a; padding-top: 10px; font-size: 0.65rem; color: #6b7280;">
+              <span *ngIf="selectedTrade.type === 'CLOSED'">{{ getFillBasisExplanation(selectedTrade.fillBasis) }}</span>
             </div>
           </div>
         </div>
       </div>
-
     </div>
   `,
   styles: [`
-    /* Eye-friendly Matte Charcoal Design System */
     .screener-container {
-      padding: 12px 18px;
-      color: #d1d5db;
-      background-color: #0f1115;
-      min-height: 100vh;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #090b0e;
+      color: #e5e7eb;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      padding: 16px;
+      min-height: 100%;
     }
+    
     .screener-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid #1a1e27;
+      padding-bottom: 12px;
     }
-    h2 {
-      margin: 0;
-      font-size: 1.15rem;
-      font-weight: 500;
-      color: #e5e7eb;
-    }
+    
     .warning-badge {
-      font-size: 0.65rem;
-      font-weight: bold;
-      background: rgba(239, 68, 68, 0.15);
+      background: rgba(239, 68, 68, 0.08);
       color: #ef4444;
-      border: 1px solid rgba(239, 68, 68, 0.3);
+      font-size: 0.65rem;
+      font-weight: 600;
       padding: 2px 8px;
       border-radius: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      border: 1px solid rgba(239, 68, 68, 0.2);
     }
+    
     .manual-refresh-btn {
-      background: #1a1e27;
-      color: #e5e7eb;
-      border: 1px solid #27272a;
-      padding: 3px 8px;
+      background: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid #334155;
+      padding: 6px 12px;
       border-radius: 4px;
+      font-size: 0.75rem;
       cursor: pointer;
-      font-size: 0.72rem;
-      transition: background-color 0.2s ease;
+      font-weight: 500;
     }
-    .manual-refresh-btn:hover {
-      background: #22252a;
+    
+    .manual-refresh-btn:hover:not(:disabled) {
+      background: #334155;
     }
+    
+    .manual-refresh-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
     .refresh-indicator {
-      font-size: 0.72rem;
-      color: #6b7280;
-      background: #161a22;
-      padding: 3px 8px;
-      border-radius: 4px;
-      border: 1px solid #27272a;
+      font-size: 0.7rem;
+      color: #10b981;
     }
+    
     .refresh-indicator.syncing {
-      color: #4ade80;
-      border-color: rgba(74, 222, 128, 0.4);
+      color: #3b82f6;
     }
+    
     .last-updated {
-      font-size: 0.72rem;
-      color: #9ca3af;
-      font-family: monospace;
+      font-size: 0.7rem;
+      color: #6b7280;
     }
-
-    /* Summary Strip */
+    
+    /* Summary strip */
     .summary-strip {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
       gap: 10px;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
     }
+    
     .summary-card {
-      background: #161a22;
-      border: 1px solid #22252a;
+      background: #111317;
+      border: 1px solid #1f2229;
       border-radius: 6px;
-      padding: 8px 12px;
+      padding: 10px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      min-width: 90px;
-      flex: 1;
+      justify-content: center;
     }
+    
     .card-val {
       font-size: 1.1rem;
       font-weight: bold;
-      color: #e5e7eb;
-      font-family: monospace;
+      color: #f3f4f6;
     }
+    
+    .card-val.positive {
+      color: #34d399;
+    }
+    
+    .card-val.negative {
+      color: #f87171;
+    }
+    
     .card-lbl {
-      font-size: 0.65rem;
+      font-size: 0.62rem;
       color: #9ca3af;
-      margin-top: 2px;
+      margin-top: 4px;
       text-transform: uppercase;
-      letter-spacing: 0.2px;
+      letter-spacing: 0.02em;
     }
-
-    /* Matte Filter Panel */
+    
+    /* Filter Panel */
     .filter-panel {
-      background: #161a22;
+      background: #111317;
+      border: 1px solid #1f2229;
       border-radius: 6px;
-      border: 1px solid #22252a;
-      padding: 10px 14px;
-      margin-bottom: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
     }
+    
     .search-box {
-      width: 100%;
+      margin-bottom: 10px;
     }
+    
     .search-input {
       width: 100%;
-      background: #0f1115;
+      background: #080a0c;
       border: 1px solid #27272a;
-      border-radius: 4px;
-      padding: 6px 10px;
       color: #e5e7eb;
-      font-size: 0.8rem;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 0.75rem;
       box-sizing: border-box;
-      transition: border-color 0.2s ease;
     }
+    
     .search-input:focus {
       outline: none;
       border-color: #3b82f6;
     }
+    
     .filters-row {
       display: flex;
-      align-items: center;
       flex-wrap: wrap;
       gap: 16px;
+      border-bottom: 1px solid #1f2229;
+      padding-bottom: 8px;
+      margin-bottom: 8px;
     }
+    
+    .filters-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+      margin-bottom: 0;
+    }
+    
     .filter-group {
       display: flex;
       align-items: center;
       gap: 10px;
       flex-wrap: wrap;
     }
+    
     .group-label {
+      font-size: 0.7rem;
+      font-weight: 600;
       color: #6b7280;
-      font-size: 0.72rem;
-      font-weight: 500;
       text-transform: uppercase;
-      letter-spacing: 0.3px;
     }
+    
     .checkbox-label {
-      font-size: 0.75rem;
-      color: #9ca3af;
-      cursor: pointer;
+      font-size: 0.72rem;
       display: flex;
       align-items: center;
       gap: 4px;
-      user-select: none;
+      color: #d1d5db;
     }
-    .toggles .checkbox-label {
-      background: #0f1115;
-      padding: 2px 6px;
-      border-radius: 4px;
-      border: 1px solid #27272a;
+    
+    .checkbox-label input {
+      margin: 0;
+      accent-color: #3b82f6;
     }
-
+    
+    /* Spinner / Empty states */
     .spinner-container {
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 30px 0;
-      color: #6b7280;
-    }
-    .spinner-container p {
-      margin-top: 8px;
+      padding: 40px;
+      color: #9ca3af;
       font-size: 0.8rem;
     }
+    .spinner-container p {
+      margin-top: 10px;
+    }
+    
     .error-container {
-      padding: 20px;
-      text-align: center;
-      background: rgba(239, 68, 68, 0.08);
-      border: 1px solid rgba(239, 68, 68, 0.2);
+      padding: 16px;
+      background: rgba(239, 68, 68, 0.05);
+      border: 1px solid rgba(239, 68, 68, 0.15);
       border-radius: 6px;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
+      text-align: center;
     }
     .error-text {
       color: #f87171;
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       margin-bottom: 10px;
     }
+    
     .no-data {
       padding: 30px;
-      text-align: center;
-      background: #161a22;
+      background: #111317;
+      border: 1px dashed #27272a;
       border-radius: 6px;
-      color: #6b7280;
-      border: 1px solid #22252a;
-      font-size: 0.8rem;
-      margin-bottom: 14px;
+      text-align: center;
+      color: #9ca3af;
+      font-size: 0.78rem;
     }
-
-    /* Tables Layout */
+    
+    /* Tables Grid */
     .tables-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 14px;
-      align-items: stretch;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
     }
+    
     .active-table-wrapper {
-      height: clamp(300px, 38vh, 440px);
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background: #161a22;
+      background: #111317;
+      border: 1px solid #1f2229;
       border-radius: 6px;
-      border: 1px solid #22252a;
+      overflow: hidden;
     }
-    .active-table-wrapper .table-scroll {
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow: auto;
-      background: rgba(30, 41, 59, 0.15);
-    }
+    
     .exits-table-wrapper {
-      height: clamp(220px, 30vh, 360px);
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
       grid-column: span 2;
-      background: #161a22;
+      background: #111317;
+      border: 1px solid #1f2229;
       border-radius: 6px;
-      border: 1px solid #22252a;
+      overflow: hidden;
     }
-    .exits-table-wrapper .table-scroll {
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow: auto;
-      background: rgba(30, 41, 59, 0.15);
-    }
+    
     .table-title {
       padding: 8px 12px;
-      font-weight: 500;
       font-size: 0.78rem;
-      border-bottom: 1px solid #22252a;
-      letter-spacing: 0.5px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
     }
+    
     .bullish-title {
-      background: rgba(74, 222, 128, 0.08);
-      color: #4ade80;
+      background: rgba(16, 185, 129, 0.08);
+      color: #34d399;
+      border-bottom: 1px solid rgba(16, 185, 129, 0.15);
     }
+    
     .bearish-title {
-      background: rgba(248, 113, 113, 0.08);
+      background: rgba(239, 68, 68, 0.08);
       color: #f87171;
+      border-bottom: 1px solid rgba(239, 68, 68, 0.15);
     }
+    
     .exits-title {
-      background: rgba(156, 163, 175, 0.08);
-      color: #e5e7eb;
+      background: #1e293b;
+      color: #e2e8f0;
+      border-bottom: 1px solid #334155;
     }
-    .table-scroll::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
+    
+    .table-scroll {
+      overflow-x: auto;
+      max-height: 400px;
+      overflow-y: auto;
     }
-    .table-scroll::-webkit-scrollbar-thumb {
-      background-color: rgba(255,255,255,0.15);
-      border-radius: 3px;
-    }
-
-    /* Table styling */
+    
     .screener-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.7rem;
+      font-size: 0.72rem;
       text-align: left;
     }
-    .screener-table thead th {
-      position: sticky;
-      top: 0;
-      z-index: 5;
-      background: #1a1e27;
+    
+    .screener-table th {
+      background: #090b0e;
       color: #9ca3af;
       font-weight: 500;
-      padding: 6px 8px;
-      border-bottom: 1px solid #22252a;
-      white-space: nowrap;
-      text-transform: uppercase;
-      font-size: 0.65rem;
-      letter-spacing: 0.2px;
+      padding: 6px 10px;
+      border-bottom: 1px solid #1f2229;
+      position: sticky;
+      top: 0;
+      z-index: 10;
     }
+    
     .sortable-th {
       cursor: pointer;
-      user-select: none;
     }
     .sortable-th:hover {
       color: #fff;
-      background: #22252a;
+      background: #111317;
     }
+    
     .screener-table td {
-      padding: 6px 8px;
-      border-bottom: 1px solid #1a1e27;
-      white-space: nowrap;
-      vertical-align: middle;
+      padding: 6px 10px;
+      border-bottom: 1px solid #16181f;
+      color: #cbd5e1;
     }
-    .screener-table tr:hover {
-      background: rgba(255, 255, 255, 0.015);
+    
+    .screener-table tbody tr:hover {
+      background: #14171f;
     }
-    .empty-row {
-      text-align: center;
-      color: #4b5563;
-      padding: 16px !important;
-      font-style: italic;
-    }
-
-    .sym-cell {
-      font-weight: bold;
-    }
-    .symbol-link {
-      color: #e5e7eb;
+    
+    .sym-cell a {
+      color: #60a5fa;
       text-decoration: none;
-      border-bottom: 1px dashed rgba(255,255,255,0.15);
+      font-weight: 600;
     }
-    .symbol-link:hover {
-      color: #3b82f6;
-      border-bottom-color: #3b82f6;
+    .sym-cell a:hover {
+      text-decoration: underline;
     }
     
     .source-tag {
-      font-size: 0.58rem;
-      font-weight: bold;
-      background: #2563eb;
-      color: #e0f2fe;
+      font-size: 0.55rem;
+      background: rgba(59, 130, 246, 0.1);
+      color: #60a5fa;
       padding: 1px 4px;
       border-radius: 3px;
+      border: 1px solid rgba(59, 130, 246, 0.2);
     }
+    
     .source-tag.pending {
-      background: #d97706;
+      background: rgba(245, 158, 11, 0.1);
+      color: #fbbf24;
+      border-color: rgba(245, 158, 11, 0.2);
     }
-
+    
     .side-tag {
       font-size: 0.6rem;
-      font-weight: bold;
+      font-weight: 600;
       padding: 1px 4px;
       border-radius: 3px;
     }
     .side-tag.long {
-      color: #4ade80;
-      background: rgba(74, 222, 128, 0.08);
+      color: #34d399;
+      background: rgba(52, 211, 153, 0.08);
     }
     .side-tag.short {
       color: #f87171;
       background: rgba(248, 113, 113, 0.08);
     }
-
+    
     .price-col {
       font-family: monospace;
-      color: #d1d5db;
+      text-align: right;
     }
+    
     .pct-col {
       font-family: monospace;
-      font-weight: bold;
+      font-weight: 500;
+      text-align: right;
     }
-    .pct-col.positive {
-      color: #4ade80;
+    
+    .positive {
+      color: #34d399 !important;
     }
-    .pct-col.negative {
-      color: #f87171;
+    
+    .negative {
+      color: #f87171 !important;
     }
+    
     .time-col {
-      font-family: monospace;
-      color: #9ca3af;
+      color: #6b7280;
+      font-size: 0.68rem;
     }
-
+    
     .status-lbl {
-      font-size: 0.6rem;
-      font-weight: bold;
-      padding: 1px 4px;
-      border-radius: 3px;
-      background: #27272a;
-      color: #a1a1aa;
+      font-size: 0.58rem;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: inline-block;
+      text-transform: uppercase;
     }
+    
     .status-lbl.fresh {
-      color: #4ade80;
-      background: rgba(74, 222, 128, 0.08);
-      border: 1px solid rgba(74, 222, 128, 0.2);
+      background: rgba(16, 185, 129, 0.08);
+      color: #10b981;
     }
+    
+    .status-lbl.target-touched {
+      background: rgba(16, 185, 129, 0.08);
+      color: #10b981;
+      border: 1px dashed #10b981;
+    }
+    
+    .status-lbl.stop-touched {
+      background: rgba(239, 68, 68, 0.08);
+      color: #ef4444;
+      border: 1px dashed #ef4444;
+    }
+    
+    .status-lbl.exit-alert-missing {
+      background: rgba(245, 158, 11, 0.08);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+    
     .status-lbl.stale {
+      background: rgba(107, 114, 128, 0.1);
       color: #9ca3af;
-      background: rgba(156, 163, 175, 0.06);
     }
-
+    
     .exit-reason-badge {
-      font-size: 0.62rem;
+      font-size: 0.65rem;
       font-weight: bold;
-      padding: 1px 4px;
-      border-radius: 3px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #fff;
     }
+    
     .exit-reason-badge.target {
-      color: #4ade80;
-      background: rgba(74, 222, 128, 0.08);
-      border: 1px solid rgba(74, 222, 128, 0.2);
+      background: #10b981;
     }
+    
     .exit-reason-badge.stop {
-      color: #f87171;
-      background: rgba(248, 113, 113, 0.08);
-      border: 1px solid rgba(248, 113, 113, 0.2);
+      background: #ef4444;
     }
+    
     .exit-reason-badge.ema_vwap_loss {
-      color: #fb923c;
-      background: rgba(251, 146, 60, 0.08);
-      border: 1px solid rgba(251, 146, 60, 0.2);
+      background: #3b82f6;
     }
+    
     .exit-reason-badge.end_of_day {
-      color: #9ca3af;
-      background: rgba(156, 163, 175, 0.08);
-      border: 1px solid rgba(156, 163, 175, 0.2);
+      background: #eab308;
+      color: #0f172a;
     }
+    
     .exit-reason-badge.unknown {
-      color: #c084fc;
-      background: rgba(192, 132, 252, 0.08);
-      border: 1px solid rgba(192, 132, 252, 0.2);
+      background: #6b7280;
     }
-
+    
+    .empty-row {
+      text-align: center;
+      padding: 20px;
+      color: #6b7280;
+      font-style: italic;
+    }
+    
     .actions-cell {
       display: flex;
-      gap: 3px;
+      gap: 4px;
       justify-content: center;
     }
     .mini-btn {
@@ -1065,7 +1205,7 @@ interface SmartTrendTrade {
       background: #27272a;
       color: #fff;
     }
-
+    
     /* Modal */
     .modal-overlay {
       position: fixed;
@@ -1141,7 +1281,7 @@ interface SmartTrendTrade {
       max-height: 80vh;
       overflow-y: auto;
     }
-
+    
     .alert-box {
       padding: 8px 12px;
       border-radius: 4px;
@@ -1158,7 +1298,7 @@ interface SmartTrendTrade {
       color: #f87171;
       border: 1px solid rgba(239, 68, 68, 0.2);
     }
-
+    
     .details-grid {
       display: grid;
       grid-template-columns: auto 1fr;
@@ -1179,7 +1319,7 @@ interface SmartTrendTrade {
       padding: 2px 0;
       text-align: right;
     }
-
+    
     @media (max-width: 1024px) {
       .tables-grid {
         grid-template-columns: minmax(0, 1fr);
@@ -1209,14 +1349,31 @@ export class SmartTrend implements OnInit, OnDestroy {
   eodExitsTodayCount = 0;
   unknownExitsTodayCount = 0;
 
-  // Paper P/L properties
-  paperAllocation: number = 10000;
+  // Realized Paper P/L Today
   paperPlToday: number = 0;
   winningTradesToday: number = 0;
   losingTradesToday: number = 0;
 
+  // Extended Capital Dashboard Metrics
+  activeCapitalNow = 0;
+  grossCapitalDeployedToday = 0;
+  peakConcurrentCapitalToday = 0;
+  unrealizedPaperPlNow = 0;
+  netPaperPlToday = 0;
+  maxConcurrentTradesToday = 0;
+
+  // Paper Settings
+  paperAllocation: number = 10000;
+  allocationLocked: boolean = false;
+  lockedAllocation: number | null = null;
+  webhookSecret: string = '';
+
+  // Test Data Toggle
+  showTestData: boolean = false;
+
   // Live prices mapping
   livePrices: { [symbol: string]: { price: number; time: number } } = {};
+  isPollingQuotes = false;
 
   // Filter States
   searchQuery: string = '';
@@ -1253,22 +1410,42 @@ export class SmartTrend implements OnInit, OnDestroy {
   lastUpdated: string = '';
   selectedTrade: SmartTrendTrade | null = null;
 
+  // Historical Daily Performance History Properties
+  historicalHistory: any[] = [];
+  selectedDays: number = 30;
+  selectedGroup: string = 'ALL';
+  historySummary: any = {
+    totalRealized: 0,
+    totalClosed: 0,
+    winRate: 0,
+    grossProfit: 0,
+    grossLoss: 0,
+    profitFactor: null,
+    bestDay: 0,
+    worstDay: 0,
+    avgDailyPl: 0
+  };
+
   private destroy$ = new Subject<void>();
 
   constructor(
     private supabaseService: SupabaseService,
+    private marketDataService: MarketDataService,
+    private http: HttpClient,
     private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
-    const savedAlloc = localStorage.getItem('nss_smarttrend_allocation');
-    if (savedAlloc) {
-      this.paperAllocation = Number(savedAlloc);
-    }
+    // 1. Fetch paper settings
+    this.fetchPaperSettings();
 
+    // 2. Fetch signals
     this.fetchData(false);
 
-    // Auto-refresh every 30 seconds
+    // 3. Fetch historical performance
+    this.fetchHistoricalPerformance();
+
+    // Auto-refresh signals every 30 seconds
     interval(30000)
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
@@ -1288,6 +1465,61 @@ export class SmartTrend implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  fetchPaperSettings() {
+    this.http.get<any>('/.netlify/functions/smarttrend-paper-settings').subscribe({
+      next: (res) => {
+        if (res && res.success && res.setting) {
+          this.paperAllocation = res.setting.allocation_per_trade;
+          this.allocationLocked = res.isLocked;
+          this.lockedAllocation = res.lockedAllocation;
+          
+          this.updateDynamicFields();
+          this.calculateSummary();
+          this.applyFilters();
+          this.cdr.detectChanges();
+        }
+      },
+      error: (err) => {
+        console.error('Failed to load paper settings:', err);
+      }
+    });
+  }
+
+  savePaperAllocation() {
+    if (this.paperAllocation < 100) {
+      alert('Allocation must be >= 100.');
+      return;
+    }
+
+    const headers = { 'Authorization': this.webhookSecret };
+    this.http.post<any>('/.netlify/functions/smarttrend-paper-settings', 
+      { allocation: this.paperAllocation }, 
+      { headers }
+    ).subscribe({
+      next: (res) => {
+        if (res && res.success) {
+          alert('Allocation setting saved successfully!');
+          this.webhookSecret = '';
+          this.fetchPaperSettings();
+        } else {
+          alert('Failed to save allocation: ' + (res.error || 'Unknown error'));
+        }
+      },
+      error: (err) => {
+        console.error('Save allocation error:', err);
+        alert('Unauthorized or request failed. Make sure your Webhook Secret is correct.');
+      }
+    });
+  }
+
+  onAllocationChange() {
+    if (this.paperAllocation < 100) this.paperAllocation = 100;
+    localStorage.setItem('nss_smarttrend_allocation', String(this.paperAllocation));
+    this.updateDynamicFields();
+    this.calculateSummary();
+    this.applyFilters();
+  }
+
   fetchData(isManual: boolean = false) {
     if (this.loading) return;
     this.loading = true;
@@ -1304,6 +1536,12 @@ export class SmartTrend implements OnInit, OnDestroy {
             const now = new Date();
             this.lastUpdated = now.toLocaleTimeString();
             this.errorMessage = '';
+            
+            // Re-fetch historical performance on manual refresh to sync up database entries
+            if (isManual) {
+              this.fetchHistoricalPerformance();
+              this.fetchPaperSettings();
+            }
           } catch (e) {
             console.error('Error processing SmartTrend signals:', e);
             this.errorMessage = 'Could not load SmartTrend signals.';
@@ -1329,7 +1567,7 @@ export class SmartTrend implements OnInit, OnDestroy {
         try {
           payload = JSON.parse(row.raw_alert_payload);
         } catch (e) {
-          // ignore parsing error, fallback to empty object
+          // ignore
         }
       } else if (typeof row.raw_alert_payload === 'object') {
         payload = row.raw_alert_payload;
@@ -1342,7 +1580,6 @@ export class SmartTrend implements OnInit, OnDestroy {
       action = action.toUpperCase();
     }
 
-    // Ignore rows with another action
     if (action !== 'BUY' && action !== 'SHORT' && action !== 'EXIT_LONG' && action !== 'EXIT_SHORT') {
       return null;
     }
@@ -1373,9 +1610,14 @@ export class SmartTrend implements OnInit, OnDestroy {
 
   processSignals(rawSignals: any[]) {
     // 1. Normalize and filter
-    const normalized = rawSignals
+    let normalized = rawSignals
       .map(r => this.normalizeSignal(r))
       .filter(r => r !== null) as NormalizedSignal[];
+
+    // Test Data toggle filters
+    if (!this.showTestData) {
+      normalized = normalized.filter(r => r.symbol !== 'STDEMO' && r.group_name !== 'NSS-SmartTrend-Dummy-Test');
+    }
 
     // 2. Remove duplicate signal_id
     const seenSignalIds = new Set<string>();
@@ -1496,6 +1738,10 @@ export class SmartTrend implements OnInit, OnDestroy {
     }
 
     this.allTrades = trades;
+    
+    // Poll quotes immediately to load FMP live prices
+    this.pollActiveQuotes();
+    
     this.updateDynamicFields();
     this.calculateSummary();
     this.applyFilters();
@@ -1506,20 +1752,46 @@ export class SmartTrend implements OnInit, OnDestroy {
     for (const t of this.allTrades) {
       const entry = this.getEntryPrice(t);
       if (t.type === 'ACTIVE' && t.open) {
-        const current = this.getCurrentPrice(t) || entry;
+        const livePrice = t.livePrice || t.open.current_price || entry;
         if (t.side === 'LONG') {
-          t.movePct = entry > 0 ? ((current - entry) / entry) * 100 : 0;
+          t.movePct = entry > 0 ? ((livePrice - entry) / entry) * 100 : 0;
         } else {
-          t.movePct = entry > 0 ? ((entry - current) / entry) * 100 : 0;
+          t.movePct = entry > 0 ? ((entry - livePrice) / entry) * 100 : 0;
         }
 
         const openedMs = new Date(t.openedTime!).getTime();
         t.ageText = this.formatDuration(now - openedMs);
+
+        // Calculate dynamic TouchState
+        const target = this.getTargetPrice(t.open);
+        const stop = t.open.stop_price || 0;
+        if (livePrice > 0) {
+          if (t.side === 'LONG') {
+            if (target > 0 && livePrice >= target) t.touchState = 'TARGET_TOUCHED';
+            else if (stop > 0 && livePrice <= stop) t.touchState = 'STOP_TOUCHED';
+            else t.touchState = 'NONE';
+          } else {
+            if (target > 0 && livePrice <= target) t.touchState = 'TARGET_TOUCHED';
+            else if (stop > 0 && livePrice >= stop) t.touchState = 'STOP_TOUCHED';
+            else t.touchState = 'NONE';
+          }
+        } else {
+          t.touchState = 'NONE';
+        }
+
+        // Unrealized P/L calculation
+        t.quantity = entry > 0 ? Math.floor(this.paperAllocation / entry) : 0;
+        const plShare = t.side === 'LONG' ? (livePrice - entry) : (entry - livePrice);
+        t.plPerShare = plShare;
+        t.unrealizedPaperPl = t.quantity * plShare;
+        t.tradeCapital = t.quantity * entry;
+
       } else if (t.type === 'CLOSED') {
         const exit = t.modeledExitPrice !== undefined && t.modeledExitPrice !== null ? t.modeledExitPrice : entry;
         t.quantity = entry > 0 ? Math.floor(this.paperAllocation / entry) : 0;
         t.plPerShare = t.side === 'LONG' ? (exit - entry) : (entry - exit);
         t.paperPl = t.quantity * t.plPerShare;
+        t.tradeCapital = t.quantity * entry;
       }
     }
   }
@@ -1534,16 +1806,45 @@ export class SmartTrend implements OnInit, OnDestroy {
     this.eodExitsTodayCount = 0;
     this.unknownExitsTodayCount = 0;
 
-    this.paperPlToday = 0;
+    this.paperPlToday = 0; // Realized P/L Today
     this.winningTradesToday = 0;
     this.losingTradesToday = 0;
 
+    this.activeCapitalNow = 0;
+    this.grossCapitalDeployedToday = 0;
+    this.unrealizedPaperPlNow = 0;
+    this.netPaperPlToday = 0;
+
+    const todayET = this.getETDateString(new Date());
+
     for (const t of this.allTrades) {
+      const entry = this.getEntryPrice(t);
+      const qty = entry > 0 ? Math.floor(this.paperAllocation / entry) : 0;
+      t.quantity = qty;
+      const tradeCapital = qty * entry;
+      t.tradeCapital = tradeCapital;
+
       if (t.type === 'ACTIVE') {
         if (t.side === 'LONG') this.activeLongsCount++;
         else if (t.side === 'SHORT') this.activeShortsCount++;
+        
+        this.activeCapitalNow += tradeCapital;
+
+        // Unrealized calculation
+        const livePrice = t.livePrice || (t.open ? t.open.current_price : entry) || entry;
+        const plShare = t.side === 'LONG' ? (livePrice - entry) : (entry - livePrice);
+        t.plPerShare = plShare;
+        t.unrealizedPaperPl = qty * plShare;
+        this.unrealizedPaperPlNow += t.unrealizedPaperPl || 0;
+
       } else if (t.type === 'CLOSED') {
-        if (t.closedTime && this.isTodayInET(t.closedTime)) {
+        const openedDateStr = this.getETDateString(t.openedTime);
+        if (openedDateStr === todayET) {
+          this.grossCapitalDeployedToday += tradeCapital;
+        }
+
+        const isClosedToday = t.closedTime && this.isTodayInET(t.closedTime);
+        if (isClosedToday) {
           this.exitsTodayCount++;
           const reason = t.close?.primaryReason || '';
           const cat = this.resolveReasonCategory(reason);
@@ -1553,12 +1854,65 @@ export class SmartTrend implements OnInit, OnDestroy {
           else if (cat === 'END_OF_DAY') this.eodExitsTodayCount++;
           else this.unknownExitsTodayCount++;
 
-          this.paperPlToday += t.paperPl || 0;
-          if ((t.paperPl || 0) > 0) this.winningTradesToday++;
-          else if ((t.paperPl || 0) < 0) this.losingTradesToday++;
+          const exit = t.modeledExitPrice !== undefined && t.modeledExitPrice !== null ? t.modeledExitPrice : entry;
+          const plShare = t.side === 'LONG' ? (exit - entry) : (entry - exit);
+          t.plPerShare = plShare;
+          t.paperPl = qty * plShare;
+          this.paperPlToday += t.paperPl || 0; // Realized P/L Today
+
+          if (t.paperPl > 0) this.winningTradesToday++;
+          else if (t.paperPl < 0) this.losingTradesToday++;
         }
       }
     }
+
+    this.netPaperPlToday = this.paperPlToday + this.unrealizedPaperPlNow;
+
+    // Timeline calculation for peak concurrent capital & max concurrent trades today
+    const events: { time: number; capChange: number; tradeChange: number; type: string }[] = [];
+    for (const t of this.allTrades) {
+      const openedDateStr = this.getETDateString(t.openedTime);
+      if (openedDateStr === todayET && t.tradeCapital) {
+        events.push({
+          time: new Date(t.openedTime!).getTime(),
+          capChange: t.tradeCapital,
+          tradeChange: 1,
+          type: 'OPEN'
+        });
+        if (t.closedTime && this.getETDateString(t.closedTime) === todayET) {
+          events.push({
+            time: new Date(t.closedTime).getTime(),
+            capChange: -t.tradeCapital,
+            tradeChange: -1,
+            type: 'CLOSE'
+          });
+        }
+      }
+    }
+
+    events.sort((a, b) => {
+      if (a.time !== b.time) return a.time - b.time;
+      return a.type === 'OPEN' ? -1 : 1; // Process OPEN before CLOSE
+    });
+
+    let runningCapital = 0;
+    let peakCapital = 0;
+    let runningTrades = 0;
+    let maxTrades = 0;
+
+    for (const ev of events) {
+      runningCapital += ev.capChange;
+      if (runningCapital > peakCapital) {
+        peakCapital = runningCapital;
+      }
+      runningTrades += ev.tradeChange;
+      if (runningTrades > maxTrades) {
+        maxTrades = runningTrades;
+      }
+    }
+
+    this.peakConcurrentCapitalToday = peakCapital;
+    this.maxConcurrentTradesToday = maxTrades;
   }
 
   isTodayInET(dateStr: string): boolean {
@@ -1568,6 +1922,19 @@ export class SmartTrend implements OnInit, OnDestroy {
     const etString = date.toLocaleDateString('en-US', { timeZone: 'America/New_York' });
     const todayString = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York' });
     return etString === todayString;
+  }
+
+  getETDateString(dateInput: string | Date | undefined): string {
+    if (!dateInput) return '';
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return '';
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(date);
   }
 
   resolveReasonCategory(reason: string | undefined): 'TARGET' | 'STOP' | 'EMA_VWAP_LOSS' | 'END_OF_DAY' | 'UNKNOWN' {
@@ -1626,7 +1993,6 @@ export class SmartTrend implements OnInit, OnDestroy {
       return t.open.trigger_price || t.open.entry_price_est || 0;
     }
     if (t.close) {
-      // fallback for orphans
       return t.close.trigger_price || 0;
     }
     return 0;
@@ -1702,7 +2068,7 @@ export class SmartTrend implements OnInit, OnDestroy {
     if (!open) return 'ORPHAN';
 
     const entry = this.getEntryPrice(t);
-    const current = this.getCurrentPrice(t);
+    const current = t.livePrice || open.current_price || entry;
     const target = this.getTargetPrice(open);
     const stop = open.stop_price || 0;
 
@@ -1758,70 +2124,59 @@ export class SmartTrend implements OnInit, OnDestroy {
     return 'UNKNOWN: Unknown fill basis.';
   }
 
-  getActiveSymbols(): string[] {
-    const symbols = new Set<string>();
-    for (const t of this.allTrades) {
-      if (t.type === 'ACTIVE' && t.symbol && t.symbol !== 'STDEMO') {
-        symbols.add(t.symbol);
-      }
-    }
-    return Array.from(symbols);
-  }
-
   pollActiveQuotes() {
-    const symbols = this.getActiveSymbols();
-    if (symbols.length === 0) return;
+    if (this.isPollingQuotes) return;
+    
+    // Find unique active symbols
+    const activeSymbols = this.allTrades
+      .filter(t => t.type === 'ACTIVE' && t.symbol)
+      .map(t => t.symbol);
 
-    from(symbols)
-      .pipe(
-        mergeMap(sym => this.fetchQuote(sym), 4),
-        takeUntil(this.destroy$)
-      )
+    if (activeSymbols.length === 0) {
+      return;
+    }
+
+    this.isPollingQuotes = true;
+    
+    this.marketDataService.getBatchQuotes(activeSymbols, this.showTestData)
+      .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (res) => {
-          if (res.price > 0) {
-            this.livePrices[res.symbol] = { price: res.price, time: Date.now() };
-            this.updateDynamicFields();
-            this.applyFilters();
+        next: (quoteMap) => {
+          for (const [sym, quote] of quoteMap.entries()) {
+            if (quote.status === 'LIVE' || quote.status === 'STALE') {
+              this.livePrices[sym] = {
+                price: quote.price,
+                time: quote.timestamp || Date.now()
+              };
+            }
+            
+            for (const t of this.allTrades) {
+              if (t.type === 'ACTIVE' && t.symbol.toUpperCase() === sym) {
+                t.livePrice = quote.price;
+                t.livePriceUpdatedAt = quote.timestamp;
+                t.quoteStatus = quote.status;
+              }
+            }
           }
+          this.isPollingQuotes = false;
+          this.updateDynamicFields();
+          this.calculateSummary();
+          this.applyFilters();
+          this.cdr.detectChanges();
         },
-        error: (err) => console.error('Error polling quotes:', err)
+        error: (err) => {
+          console.error('[SmartTrend] Error fetching quotes:', err);
+          this.isPollingQuotes = false;
+        }
       });
   }
 
-  fetchQuote(symbol: string): Observable<{ symbol: string; price: number }> {
-    const url = `/.netlify/functions/finnhub-proxy?path=/quote&symbol=${encodeURIComponent(symbol)}`;
-    return new Observable<{ symbol: string; price: number }>(subscriber => {
-      fetch(url)
-        .then(res => res.json())
-        .then(data => {
-          const price = data && typeof data.c === 'number' ? data.c : 0;
-          subscriber.next({ symbol, price });
-          subscriber.complete();
-        })
-        .catch(err => {
-          console.warn(`Failed to fetch quote for ${symbol}:`, err);
-          subscriber.next({ symbol, price: 0 });
-          subscriber.complete();
-        });
-    });
-  }
-
-  getCurrentPrice(t: SmartTrendTrade): number {
-    const symbol = t.symbol;
-    if (this.livePrices[symbol]) {
-      return this.livePrices[symbol].price;
-    }
-    if (t.open && t.open.current_price) {
-      return t.open.current_price;
-    }
-    return 0;
-  }
-
   getCurrentPriceDisplay(t: SmartTrendTrade): string {
-    const symbol = t.symbol;
-    if (this.livePrices[symbol]) {
-      return '$' + this.livePrices[symbol].price.toFixed(2);
+    if (t.livePrice !== undefined && t.livePrice !== null && t.livePrice > 0) {
+      const suffix = t.quoteStatus === 'STALE' ? ' (stale)' : 
+                     t.quoteStatus === 'UNAVAILABLE' ? ' (unavail)' : 
+                     t.quoteStatus === 'ERROR' ? ' (error)' : '';
+      return '$' + t.livePrice.toFixed(2) + suffix;
     }
     if (t.open && t.open.current_price) {
       return '$' + t.open.current_price.toFixed(2) + ' (stale)';
@@ -1829,12 +2184,109 @@ export class SmartTrend implements OnInit, OnDestroy {
     return '--';
   }
 
-  onAllocationChange() {
-    if (this.paperAllocation < 100) this.paperAllocation = 100;
-    localStorage.setItem('nss_smarttrend_allocation', String(this.paperAllocation));
-    this.updateDynamicFields();
-    this.calculateSummary();
-    this.applyFilters();
+  onShowTestDataChange() {
+    // Re-process signals to apply test data filters
+    this.fetchData(false);
+  }
+
+  fetchHistoricalPerformance() {
+    this.supabaseService.getSmartTrendDailyPerformance(this.selectedDays, this.selectedGroup)
+      .subscribe({
+        next: (data) => {
+          this.historicalHistory = data || [];
+          this.calculateHistorySummary();
+          this.cdr.detectChanges();
+        },
+        error: (err) => {
+          console.error('Failed to load performance history:', err);
+        }
+      });
+  }
+
+  calculateHistorySummary() {
+    let totalRealized = 0;
+    let totalClosed = 0;
+    let winningTrades = 0;
+    let grossProfit = 0;
+    let grossLoss = 0;
+    let bestDayPl = -Infinity;
+    let worstDayPl = Infinity;
+
+    for (const row of this.historicalHistory) {
+      const pl = Number(row.realized_paper_pl) || 0;
+      totalRealized += pl;
+      totalClosed += Number(row.closed_trades) || 0;
+      winningTrades += Number(row.winning_trades) || 0;
+      grossProfit += Number(row.gross_profit) || 0;
+      grossLoss += Number(row.gross_loss) || 0;
+
+      if (pl > bestDayPl) bestDayPl = pl;
+      if (pl < worstDayPl) worstDayPl = pl;
+    }
+
+    const count = this.historicalHistory.length;
+    this.historySummary = {
+      totalRealized,
+      totalClosed,
+      winRate: totalClosed > 0 ? (winningTrades / totalClosed) * 100 : 0,
+      grossProfit,
+      grossLoss,
+      profitFactor: Math.abs(grossLoss) > 0 ? grossProfit / Math.abs(grossLoss) : null,
+      bestDay: count > 0 ? bestDayPl : 0,
+      worstDay: count > 0 ? worstDayPl : 0,
+      avgDailyPl: count > 0 ? totalRealized / count : 0
+    };
+  }
+
+  exportHistoryCSV() {
+    if (this.historicalHistory.length === 0) {
+      alert('No data to export.');
+      return;
+    }
+    const headers = [
+      'Trade Date', 'Version', 'Group', 'Allocation / Trade', 
+      'Opened Trades', 'Closed Trades', 'Active Trades', 'Winning Trades', 'Losing Trades', 
+      'Target Exits', 'Stop Exits', 'Structure Exits', 'EOD Exits', 
+      'Gross Deployed Capital', 'Peak Concurrent Capital', 'Realized Paper P/L', 
+      'Win Rate %', 'Profit Factor', 'Average Daily Return %', 'Return on Peak Capital %'
+    ];
+
+    const rows = this.historicalHistory.map(r => [
+      r.trade_date,
+      r.strategy_version,
+      r.group_name,
+      r.allocation_per_trade,
+      r.opened_trades,
+      r.closed_trades,
+      r.active_trades_at_snapshot,
+      r.winning_trades,
+      r.losing_trades,
+      r.target_exits,
+      r.stop_exits,
+      r.structure_exits,
+      r.eod_exits,
+      r.gross_deployed_capital,
+      r.peak_concurrent_capital,
+      r.realized_paper_pl,
+      r.win_rate_pct,
+      r.profit_factor,
+      r.average_trade_return_pct,
+      r.return_on_peak_capital_pct
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...rows.map(e => e.map(val => {
+          if (val === null || val === undefined) return '';
+          return typeof val === 'string' && val.includes(',') ? `"${val}"` : val;
+        }).join(','))].join('\n');
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `smarttrend_history_${this.selectedDays}d.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   applyFilters() {
@@ -1917,7 +2369,7 @@ export class SmartTrend implements OnInit, OnDestroy {
       }
     }
 
-    // Sort active long list
+    // Sort active list
     activeLongs.sort((a, b) => this.sortCompare(a, b));
     activeShorts.sort((a, b) => this.sortCompare(a, b));
     
@@ -1960,8 +2412,8 @@ export class SmartTrend implements OnInit, OnDestroy {
       valA = this.getEntryPrice(a);
       valB = this.getEntryPrice(b);
     } else if (this.sortKey === 'current') {
-      valA = a.open?.current_price || 0;
-      valB = b.open?.current_price || 0;
+      valA = a.livePrice || (a.open ? a.open.current_price : 0) || 0;
+      valB = b.livePrice || (b.open ? b.open.current_price : 0) || 0;
     } else if (this.sortKey === 'move_pct') {
       valA = a.movePct || 0;
       valB = b.movePct || 0;
@@ -1969,8 +2421,8 @@ export class SmartTrend implements OnInit, OnDestroy {
       valA = a.openedTime ? new Date(a.openedTime).getTime() : 0;
       valB = b.openedTime ? new Date(b.openedTime).getTime() : 0;
     } else if (this.sortKey === 'status') {
-      valA = a.open?.status || '';
-      valB = b.open?.status || '';
+      valA = this.getDerivedStatus(a);
+      valB = this.getDerivedStatus(b);
     } else if (this.sortKey === 'result') {
       valA = a.resultPct || 0;
       valB = b.resultPct || 0;

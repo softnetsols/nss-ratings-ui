@@ -5,20 +5,30 @@ import { of, throwError } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
+import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { MarketDataService } from '../../services/market-data.service';
+
 describe('SmartTrend Component Tests', () => {
   let component: SmartTrend;
   let fixture: ComponentFixture<SmartTrend>;
   let mockSupabaseService: any;
+  let mockMarketDataService: any;
 
   beforeEach(async () => {
     mockSupabaseService = {
-      getSmartTrendSignals: jasmine.createSpy('getSmartTrendSignals').and.returnValue(of([]))
+      getSmartTrendSignals: jasmine.createSpy('getSmartTrendSignals').and.returnValue(of([])),
+      getSmartTrendDailyPerformance: jasmine.createSpy('getSmartTrendDailyPerformance').and.returnValue(of([]))
+    };
+
+    mockMarketDataService = {
+      getBatchQuotes: jasmine.createSpy('getBatchQuotes').and.returnValue(of(new Map()))
     };
 
     await TestBed.configureTestingModule({
-      imports: [CommonModule, FormsModule, SmartTrend],
+      imports: [CommonModule, FormsModule, HttpClientTestingModule, SmartTrend],
       providers: [
-        { provide: SupabaseService, useValue: mockSupabaseService }
+        { provide: SupabaseService, useValue: mockSupabaseService },
+        { provide: MarketDataService, useValue: mockMarketDataService }
       ]
     }).compileComponents();
 

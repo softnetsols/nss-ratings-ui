@@ -1067,6 +1067,26 @@ exports.handler = async (event, context) => {
         });
     }
 
+    // Trigger daily performance aggregation for SmartTrend Core events
+    const hasSmartTrendSignals = rows.some(r => r.strategy_name === 'smarttrend_core');
+    if (hasSmartTrendSignals) {
+      try {
+        const { getETDateString, aggregatePerformanceForDate } = require('./_shared/smarttrend-performance');
+        const tradeDate = getETDateString(new Date());
+        
+        // Run aggregation asynchronously. Do not await it so we don't block the webhook response!
+        aggregatePerformanceForDate(supabase, tradeDate)
+          .then(() => {
+            console.log(`[screener-webhook-v2] SmartTrend performance aggregation successful for ${tradeDate}`);
+          })
+          .catch(err => {
+            console.error(`[screener-webhook-v2] SmartTrend performance aggregation failed for ${tradeDate}:`, err);
+          });
+      } catch (err) {
+        console.error('[screener-webhook-v2] Failed to require or trigger SmartTrend performance aggregation:', err);
+      }
+    }
+
     const receivedEvents = (payload.events || []).length;
     const generatedRows  = rows.length;
     const skippedRows    = generatedRows - insertedRows;
