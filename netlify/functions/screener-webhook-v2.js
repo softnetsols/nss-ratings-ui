@@ -541,8 +541,8 @@ exports.handler = async (event, context) => {
 
       const processItems = (items, direction) => {
         for (const item of items) {
-          // Support both short and long keys
-          const sym = item.symbol || item.sym || item.s;
+          // Support all variations of symbol key (symbol, sym, s, ticker, symbolId)
+          const sym = item.symbol || item.sym || item.s || item.ticker || item.symbolId;
           const price = item.p !== undefined ? Number(item.p) : (item.price !== undefined ? Number(item.price) : 0.0);
           const chg = item.c !== undefined ? Number(item.c) : (item.chg !== undefined ? Number(item.chg) : 0.0);
           const rvol = item.rv !== undefined ? Number(item.rv) : (item.rvol !== undefined ? Number(item.rvol) : 0.0);
@@ -554,6 +554,14 @@ exports.handler = async (event, context) => {
           const timeframe = item.tf || item.timeframe || '15';
           const score_reasons = item.rs !== undefined ? String(item.rs) : (item.score_reasons !== undefined ? String(item.score_reasons) : "");
 
+          const ema9 = item.ema9 !== undefined ? Number(item.ema9) : null;
+          const ema21 = item.ema21 !== undefined ? Number(item.ema21) : null;
+
+          const sw_high = item.sw_high !== undefined ? Number(item.sw_high) : (item.recent_swing_high !== undefined ? Number(item.recent_swing_high) : null);
+          const sw_low = item.sw_low !== undefined ? Number(item.sw_low) : (item.recent_swing_low !== undefined ? Number(item.recent_swing_low) : null);
+          const sig_high = item.sig_high !== undefined ? Number(item.sig_high) : (item.signal_candle_high !== undefined ? Number(item.signal_candle_high) : null);
+          const sig_low = item.sig_low !== undefined ? Number(item.sig_low) : (item.signal_candle_low !== undefined ? Number(item.signal_candle_low) : null);
+
           const normalizedItem = {
             ...item,
             sym,
@@ -564,6 +572,8 @@ exports.handler = async (event, context) => {
             signal_time,
             trigger_price: trigger_price_val,
             vwap,
+            ema9,
+            ema21,
             is_reset,
             timeframe,
             score_reasons,
@@ -573,10 +583,10 @@ exports.handler = async (event, context) => {
             day_low: item.day_low !== undefined ? Number(item.day_low) : price,
             premarket_high: item.premarket_high !== undefined ? Number(item.premarket_high) : null,
             premarket_low: item.premarket_low !== undefined ? Number(item.premarket_low) : null,
-            sw_high: item.sw_high !== undefined ? Number(item.sw_high) : null,
-            sw_low: item.sw_low !== undefined ? Number(item.sw_low) : null,
-            sig_high: item.sig_high !== undefined ? Number(item.sig_high) : null,
-            sig_low: item.sig_low !== undefined ? Number(item.sig_low) : null,
+            sw_high,
+            sw_low,
+            sig_high,
+            sig_low,
             at_val: item.at_val !== undefined ? Number(item.at_val) : null,
             atr: item.atr !== undefined ? Number(item.atr) : null
           };
