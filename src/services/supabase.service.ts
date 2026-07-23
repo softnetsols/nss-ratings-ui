@@ -46,4 +46,21 @@ export class SupabaseService {
       return data ?? [];
     }));
   }
+
+  getSmartTrendSignals(): Observable<any[]> {
+    const fetchData = this.supabase
+      .from("screener_signals")
+      .select("*")
+      .eq("strategy_name", "smarttrend_core")
+      .order("signal_bar_time", { ascending: false })
+      .limit(500);
+
+    return from(fetchData.then(({ data, error }) => {
+      if (error) {
+        console.error('Supabase fetch error:', error);
+        throw error;
+      }
+      return data ?? [];
+    }));
+  }
 }

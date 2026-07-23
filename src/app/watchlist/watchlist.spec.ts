@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { Watchlist } from './watchlist';
+import { Firestore } from '@angular/fire/firestore';
 
 describe('Watchlist', () => {
   let component: Watchlist;
@@ -8,7 +9,10 @@ describe('Watchlist', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [Watchlist]
+      imports: [Watchlist],
+      providers: [
+        { provide: Firestore, useValue: {} }
+      ]
     })
     .compileComponents();
 

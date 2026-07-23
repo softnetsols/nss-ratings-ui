@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS public.screener_signals (
   symbol text NOT NULL,
   direction text,
   strategy_name text,
+  action text,
+  lifecycle text,
   timeframe text,
   signal_bar_time timestamptz,
   current_price numeric,
