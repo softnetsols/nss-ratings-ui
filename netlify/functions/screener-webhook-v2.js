@@ -558,8 +558,8 @@ exports.handler = async (event, context) => {
           const timeframe = item.tf || item.timeframe || '15';
           const score_reasons = item.rs !== undefined ? String(item.rs) : (item.score_reasons !== undefined ? String(item.score_reasons) : "");
 
-          const ema9 = item.ema9 !== undefined ? Number(item.ema9) : null;
-          const ema21 = item.ema21 !== undefined ? Number(item.ema21) : null;
+          const ema9_val = item.ema9 !== undefined ? Number(item.ema9) : null;
+          const ema21_val = item.ema21 !== undefined ? Number(item.ema21) : null;
 
           const sw_high = item.sw_high !== undefined ? Number(item.sw_high) : (item.recent_swing_high !== undefined ? Number(item.recent_swing_high) : null);
           const sw_low = item.sw_low !== undefined ? Number(item.sw_low) : (item.recent_swing_low !== undefined ? Number(item.recent_swing_low) : null);
@@ -576,8 +576,8 @@ exports.handler = async (event, context) => {
             signal_time,
             trigger_price: trigger_price_val,
             vwap,
-            ema9,
-            ema21,
+            ema9: ema9_val,
+            ema21: ema21_val,
             is_reset,
             timeframe,
             score_reasons,
