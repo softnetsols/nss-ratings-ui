@@ -193,17 +193,14 @@ function processWatchlistV1(payload) {
     vwap,
     vwapDistancePct,
     events = [],
-    test: isTest = false
+    test = false
   } = payload;
 
   // Skip test-mode payloads — they are for TradingView validation only.
-  if (isTest) {
-    console.log(`[nss-watchlist-v1] Skipping test payload for ${symbolId}`);
+  if (test === true || test === 'true' || test === 1 || test === '1') {
+    console.log(`[nss-watchlist-v1] Skipping test payload for ${symbolId || ticker}`);
     return rows;
   }
-
-  // Derive the group_name from exchange/ticker for display grouping.
-  const group_name = `NSS_Master_${exchange || 'UNKNOWN'}`;
 
   for (const ev of events) {
     const {
@@ -225,14 +222,34 @@ function processWatchlistV1(payload) {
     // Skip events with no qualifying signal (NONE means no action)
     if (!evType || evType === 'NONE') continue;
 
-    // Map event direction
-    const direction = evType === 'BUY' ? 'bullish' : 'bearish';
+    // Map event direction, action, and lifecycle
+    let direction = 'bearish';
+    let lifecycle = null;
+    let action = null;
+    let strategy_name = strategy ? strategy.toLowerCase() : '';
+    let group_name = `NSS_Master_${exchange || 'UNKNOWN'}`;
 
-    // Map strategy name to legacy format
-    const strategy_name =
-      strategy === 'ALPHATREND' ? 'alphatrend_reversal' :
-      strategy === 'GOLDENCROSS' ? 'golden_death_cross' :
-      strategy.toLowerCase();
+    if (strategy === 'SMARTTREND_CORE') {
+      strategy_name = 'smarttrend_core';
+      action = evType; // BUY, SHORT, EXIT_LONG, EXIT_SHORT
+      if (evType === 'BUY') {
+        direction = 'bullish';
+        lifecycle = 'OPEN';
+      } else if (evType === 'SHORT') {
+        direction = 'bearish';
+        lifecycle = 'OPEN';
+      } else if (evType === 'EXIT_LONG' || evType === 'EXIT_SHORT') {
+        direction = 'flat';
+        lifecycle = 'CLOSE';
+      }
+      group_name = `NSS_SmartTrend_${exchange || 'UNKNOWN'}`;
+    } else {
+      direction = evType === 'BUY' ? 'bullish' : 'bearish';
+      strategy_name =
+        strategy === 'ALPHATREND' ? 'alphatrend_reversal' :
+        strategy === 'GOLDENCROSS' ? 'golden_death_cross' :
+        strategy ? strategy.toLowerCase() : '';
+    }
 
     // Signal bar time (ISO) from event-specific time (if present) or payload signalBarCloseTime
     const effectiveCloseTime = eventSignalTime || signalBarCloseTime;
@@ -241,11 +258,19 @@ function processWatchlistV1(payload) {
       : new Date().toISOString();
 
     // signal_id uses the Pine eventId directly to guarantee idempotency.
-    // Format: NSS_Master|NASDAQ:AAPL|15|ALPHATREND|BUY|<closeTs>
     const signal_id = eventId || `${symbolId}_${strategy_name}_${direction}_${signalTf}_${signalBarCloseTime || Date.now()}`;
 
-    // Score — Pine already calculated 0-100; build reasons from reasonMask.
-    const score = typeof evScore === 'number' ? Math.max(0, Math.min(100, evScore)) : 30;
+    // Score handling
+    let score = 30;
+    if (strategy === 'SMARTTREND_CORE') {
+      if (lifecycle === 'CLOSE') {
+        score = 100;
+      } else {
+        score = typeof evScore === 'number' ? Math.max(0, Math.min(100, evScore)) : 50;
+      }
+    } else {
+      score = typeof evScore === 'number' ? Math.max(0, Math.min(100, evScore)) : 30;
+    }
     const quality = score >= 80 ? 'A' : (score >= 65 ? 'B' : (score >= 50 ? 'C' : 'R'));
 
     // Decode reasonMask into human-readable reasons (same bit table as legacy)
@@ -265,23 +290,55 @@ function processWatchlistV1(payload) {
       if (mask & 512) reasons.push('-15 Premarket Low Volume');
     }
 
-    // Trade plan fields — the new schema pre-calculates these in Pine.
-    // Map to legacy column names directly.
+    // Trade plan fields
     const tp = tradePlan || {};
     const trade_plan_valid = tp.valid === true;
     const entry_price_est = typeof triggerPrice === 'number' ? triggerPrice : (typeof signalPrice === 'number' ? signalPrice : 0);
-    const stop_price         = trade_plan_valid && typeof tp.stop    === 'number' ? tp.stop    : null;
-    const target1_price      = trade_plan_valid && typeof tp.target1 === 'number' ? tp.target1 : null;
-    const target2_price      = trade_plan_valid && typeof tp.target2 === 'number' ? tp.target2 : null;
-    const target3_price      = trade_plan_valid && typeof tp.target3 === 'number' ? tp.target3 : null;
-    const risk_per_share     = trade_plan_valid && typeof tp.risk    === 'number' ? tp.risk    : null;
-    const atr_at_signal      = trade_plan_valid && typeof tp.atr     === 'number' ? tp.atr     : null;
-    const close_price_est    = target2_price; // matches legacy convention
-    const recent_swing_high  = trade_plan_valid && typeof tp.swingHigh  === 'number' ? tp.swingHigh  : null;
-    const recent_swing_low   = trade_plan_valid && typeof tp.swingLow   === 'number' ? tp.swingLow   : null;
-    const signal_candle_high = trade_plan_valid && typeof tp.signalHigh === 'number' ? tp.signalHigh : null;
-    const signal_candle_low  = trade_plan_valid && typeof tp.signalLow  === 'number' ? tp.signalLow  : null;
-    const alphatrend_at_signal = typeof alphaTrendValue === 'number' ? alphaTrendValue : null;
+    
+    let stop_price         = null;
+    let target1_price      = null;
+    let target2_price      = null;
+    let target3_price      = null;
+    let risk_per_share     = null;
+    let atr_at_signal      = null;
+    let close_price_est    = null;
+    let recent_swing_high  = null;
+    let recent_swing_low   = null;
+    let signal_candle_high = null;
+    let signal_candle_low  = null;
+    let alphatrend_at_signal = null;
+    let trade_plan_quality = 'invalid';
+    let trade_plan_reason  = 'Pine reported tradePlan.valid=false';
+    let invalidation_reason = '';
+
+    if (strategy === 'SMARTTREND_CORE' && lifecycle === 'CLOSE') {
+      trade_plan_quality = 'not_applicable';
+      trade_plan_reason = 'SmartTrend exit event';
+    } else {
+      stop_price         = trade_plan_valid && typeof tp.stop    === 'number' ? tp.stop    : null;
+      target1_price      = trade_plan_valid && typeof tp.target1 === 'number' ? tp.target1 : null;
+      target2_price      = trade_plan_valid && typeof tp.target2 === 'number' ? tp.target2 : null;
+      target3_price      = trade_plan_valid && typeof tp.target3 === 'number' ? tp.target3 : null;
+      risk_per_share     = trade_plan_valid && typeof tp.risk    === 'number' ? tp.risk    : null;
+      atr_at_signal      = trade_plan_valid && typeof tp.atr     === 'number' ? tp.atr     : null;
+      close_price_est    = target2_price; // matches legacy convention
+      recent_swing_high  = trade_plan_valid && typeof tp.swingHigh  === 'number' ? tp.swingHigh  : null;
+      recent_swing_low   = trade_plan_valid && typeof tp.swingLow   === 'number' ? tp.swingLow   : null;
+      signal_candle_high = trade_plan_valid && typeof tp.signalHigh === 'number' ? tp.signalHigh : null;
+      signal_candle_low  = trade_plan_valid && typeof tp.signalLow  === 'number' ? tp.signalLow  : null;
+      alphatrend_at_signal = typeof alphaTrendValue === 'number' ? alphaTrendValue : null;
+
+      if (trade_plan_valid && risk_per_share !== null && risk_per_share > 0) {
+        const risk_pct = (risk_per_share / entry_price_est) * 100;
+        if (risk_pct > 2.0) {
+          trade_plan_quality = 'wide_risk';
+          trade_plan_reason  = 'Stop is more than 2% away from entry';
+        } else {
+          trade_plan_quality = 'valid';
+          trade_plan_reason  = '';
+        }
+      }
+    }
 
     // Derived metrics
     const vwapNum = typeof vwap === 'number' ? vwap : Number(vwap) || 0;
@@ -291,21 +348,6 @@ function processWatchlistV1(payload) {
     const distance_from_vwap_pct = vwapNum !== 0 ? ((price - vwapNum) / vwapNum) * 100 : 0;
     const distance_from_ema9_pct = ema9Num !== 0 ? ((price - ema9Num) / ema9Num) * 100 : 0;
 
-    // Trade plan quality — use Pine's pre-validated flag
-    let trade_plan_quality = 'invalid';
-    let trade_plan_reason  = 'Pine reported tradePlan.valid=false';
-    let invalidation_reason = '';
-    if (trade_plan_valid && risk_per_share !== null && risk_per_share > 0) {
-      const risk_pct = (risk_per_share / entry_price_est) * 100;
-      if (risk_pct > 2.0) {
-        trade_plan_quality = 'wide_risk';
-        trade_plan_reason  = 'Stop is more than 2% away from entry';
-      } else {
-        trade_plan_quality = 'valid';
-        trade_plan_reason  = '';
-      }
-    }
-
     // Staleness check
     let status = score < 50 ? 'rejected' : 'fresh';
     const ageMs = Date.now() - new Date(signal_bar_time).getTime();
@@ -313,12 +355,21 @@ function processWatchlistV1(payload) {
       status = 'stale';
     }
 
+    // Log the details
+    console.log(
+      `[screener-watchlist-v1] event processed: strategy=${strategy_name} action=${action || evType} ` +
+      `tradeId=${ev.tradeId || 'N/A'} symbol=${ticker || symbolId} generatedRows=1 ` +
+      `direction=${direction} primaryReason=${ev.primaryReason || 'N/A'}`
+    );
+
     rows.push({
       signal_id,
       symbol: ticker || symbolId,
       group_name,
       strategy_name,
       direction,
+      lifecycle,
+      action,
       timeframe: String(signalTf || '15'),
       signal_mode: 'confirmed',
       signal_bar_time,
