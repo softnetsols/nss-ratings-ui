@@ -442,6 +442,8 @@ function processWatchlistV1(payload) {
 // ────────────────────────────────────────────────────────────────────────────
 
 exports.handler = async (event, context) => {
+  console.log(`[screener-webhook-v2] Incoming ${event.httpMethod} request from ${event.headers['x-forwarded-for'] || 'unknown'}`);
+
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
     return {
@@ -484,6 +486,7 @@ exports.handler = async (event, context) => {
     // Verify token (authorization header or query param)
     const expectedToken = process.env.WEBHOOK_SECRET || process.env.WEBHOOK_SECRET_TOKEN;
     if (!expectedToken) {
+      console.error('[screener-webhook-v2] Webhook secret is not configured on Netlify environment variables');
       return {
         statusCode: 500,
         body: 'Webhook secret is not configured on the server.'
@@ -493,6 +496,7 @@ exports.handler = async (event, context) => {
     const headerToken = event.headers['authorization'] || event.headers['Authorization'];
     const token = headerToken || (event.queryStringParameters && event.queryStringParameters.token);
     if (!token || token !== expectedToken) {
+      console.warn(`[screener-webhook-v2] 401 Unauthorized - Provided token: ${token ? 'MISMATCH' : 'MISSING'}. Add ?token=YOUR_SECRET to Webhook URL.`);
       return {
         statusCode: 401,
         body: 'Unauthorized'
