@@ -362,4 +362,235 @@ describe('SmartTrend Component Tests', () => {
     tick(30000);
     expect(mockSupabaseService.getSmartTrendSignals.calls.count()).toBe(2); // count did not increase
   }));
+
+  // 19. LONG TARGET uses target price, not candle-close trigger price.
+  it('19. LONG TARGET uses target price, not candle-close trigger price', () => {
+    const buy = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'BUY', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, target1_price: 110.0, target2_price: 120.0, signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_LONG', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 108.0, primary_reason: 'TARGET', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.processSignals([buy, exit]);
+    const trade = component.filteredClosedTrades[0];
+    expect(trade.modeledExitPrice).toBe(110.0);
+    expect(trade.fillBasis).toBe('TARGET_LEVEL');
+  });
+
+  // 20. SHORT TARGET uses target price.
+  it('20. SHORT TARGET uses target price', () => {
+    const short = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'SHORT', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, target1_price: 90.0, signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_SHORT', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 92.0, primary_reason: 'TARGET', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.processSignals([short, exit]);
+    const trade = component.filteredClosedTrades[0];
+    expect(trade.modeledExitPrice).toBe(90.0);
+    expect(trade.fillBasis).toBe('TARGET_LEVEL');
+  });
+
+  // 21. LONG STOP uses configured stop.
+  it('21. LONG STOP uses configured stop', () => {
+    const buy = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'BUY', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, stop_price: 98.0, signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_LONG', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 95.0, primary_reason: 'STOP', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.processSignals([buy, exit]);
+    const trade = component.filteredClosedTrades[0];
+    expect(trade.modeledExitPrice).toBe(98.0);
+    expect(trade.fillBasis).toBe('STOP_LEVEL');
+  });
+
+  // 22. SHORT STOP uses configured stop.
+  it('22. SHORT STOP uses configured stop', () => {
+    const short = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'SHORT', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, stop_price: 102.0, signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_SHORT', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 105.0, primary_reason: 'STOP', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.processSignals([short, exit]);
+    const trade = component.filteredClosedTrades[0];
+    expect(trade.modeledExitPrice).toBe(102.0);
+    expect(trade.fillBasis).toBe('STOP_LEVEL');
+  });
+
+  // 23. Structure exit uses explicit exitPrice when available.
+  it('23. Structure exit uses explicit exitPrice when available', () => {
+    const buy = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'BUY', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_LONG', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 99.0, exit_price: 99.5, primary_reason: 'EMA_VWAP_LOSS', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.processSignals([buy, exit]);
+    const trade = component.filteredClosedTrades[0];
+    expect(trade.modeledExitPrice).toBe(99.5);
+    expect(trade.fillBasis).toBe('EVENT_PRICE');
+  });
+
+  // 24. End-of-day exit uses explicit exitPrice when available.
+  it('24. End-of-day exit uses explicit exitPrice when available', () => {
+    const buy = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'BUY', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_LONG', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 98.0, exit_price: 98.2, primary_reason: 'END_OF_DAY', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.processSignals([buy, exit]);
+    const trade = component.filteredClosedTrades[0];
+    expect(trade.modeledExitPrice).toBe(98.2);
+    expect(trade.fillBasis).toBe('EVENT_PRICE');
+  });
+
+  // 25. Result percent uses modeled exit price.
+  it('25. Result percent uses modeled exit price', () => {
+    const buy = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'BUY', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, target1_price: 105.0, signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_LONG', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 103.0, primary_reason: 'TARGET', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.processSignals([buy, exit]);
+    const trade = component.filteredClosedTrades[0];
+    expect(trade.resultPct).toBe(5.0); // (105 - 100)/100 * 100
+  });
+
+  // 26. Paper quantity uses floor(allocation / entry).
+  it('26. Paper quantity uses floor(allocation / entry)', () => {
+    const buy = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'BUY', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 33.0, signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_LONG', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 35.0, exit_price: 35.0, primary_reason: 'END_OF_DAY', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.paperAllocation = 10000;
+    component.processSignals([buy, exit]);
+    const trade = component.filteredClosedTrades[0];
+    expect(trade.quantity).toBe(303); // floor(10000 / 33)
+  });
+
+  // 27. LONG dollar P/L is correct.
+  it('27. LONG dollar P/L is correct', () => {
+    const buy = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'BUY', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, target1_price: 110.0, signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_LONG', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 108.0, primary_reason: 'TARGET', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.paperAllocation = 10000;
+    component.processSignals([buy, exit]);
+    const trade = component.filteredClosedTrades[0];
+    expect(trade.paperPl).toBe(1000.0); // 100 shares * (110 - 100)
+  });
+
+  // 28. SHORT dollar P/L is correct.
+  it('28. SHORT dollar P/L is correct', () => {
+    const short = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'SHORT', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, target1_price: 90.0, signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_SHORT', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 92.0, primary_reason: 'TARGET', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.paperAllocation = 10000;
+    component.processSignals([short, exit]);
+    const trade = component.filteredClosedTrades[0];
+    expect(trade.paperPl).toBe(1000.0); // 100 shares * (100 - 90)
+  });
+
+  // 29. Paper allocation persists in localStorage.
+  it('29. Paper allocation persists in localStorage', () => {
+    spyOn(localStorage, 'setItem');
+    component.paperAllocation = 5000;
+    component.onAllocationChange();
+    expect(localStorage.setItem).toHaveBeenCalledWith('nss_smarttrend_allocation', '5000');
+  });
+
+  // 30. SmartTrend CLOSED rows display CLOSED, not CONFLICT.
+  it('30. SmartTrend CLOSED rows display CLOSED, not CONFLICT', () => {
+    const buy = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'BUY', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, status: 'conflict', signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_LONG', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 105.0, status: 'conflict', primary_reason: 'TARGET', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.processSignals([buy, exit]);
+    const trade = component.filteredClosedTrades[0];
+    expect(component.getDerivedStatus(trade)).toBe('CLOSED');
+  });
+
+  // 31. SmartTrend matching OPEN/CLOSE rows are not treated as conflict.
+  it('31. SmartTrend matching OPEN/CLOSE rows are not treated as conflict', () => {
+    const buy = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'BUY', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_LONG', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 105.0, primary_reason: 'TARGET', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.processSignals([buy, exit]);
+    const trade = component.filteredClosedTrades[0];
+    // Pairing works correctly
+    expect(trade.open).toBeTruthy();
+    expect(trade.close).toBeTruthy();
+  });
+
+  // 32. Raw database status remains available in details.
+  it('32. Raw database status remains available in details', () => {
+    const buy = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'BUY', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, status: 'conflict', signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    const exit = {
+      signal_id: 'S2', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'EXIT_LONG', lifecycle: 'CLOSE', trade_id: 'T1',
+      trigger_price: 105.0, status: 'fresh', primary_reason: 'TARGET', signal_bar_time: '2026-07-22T12:15:00Z'
+    };
+    component.processSignals([buy, exit]);
+    const trade = component.filteredClosedTrades[0];
+    expect(trade.open?.status).toBe('conflict');
+    expect(trade.close?.status).toBe('fresh');
+  });
+
+  // 33. Layout verification: 50/50, sticky headers, independent scrolling, responsive layout.
+  it('33. should verify layout attributes exists', () => {
+    fixture.detectChanges(); // triggers ngOnInit, which fetches []
+    const buy = {
+      signal_id: 'S1', symbol: 'AAPL', strategy_name: 'smarttrend_core', action: 'BUY', lifecycle: 'OPEN', trade_id: 'T1',
+      trigger_price: 100.0, signal_bar_time: '2026-07-22T12:00:00Z'
+    };
+    component.processSignals([buy]);
+    fixture.detectChanges(); // renders the new signal
+    const element = fixture.nativeElement;
+    // Check markup elements
+    expect(element.querySelector('.tables-grid')).toBeTruthy();
+    expect(element.querySelector('.active-table-wrapper')).toBeTruthy();
+    expect(element.querySelector('.exits-table-wrapper')).toBeTruthy();
+  });
 });

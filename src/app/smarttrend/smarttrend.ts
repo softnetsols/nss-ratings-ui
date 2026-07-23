@@ -2,7 +2,8 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule, DecimalPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { Subject, takeUntil, interval } from 'rxjs';
+import { Subject, takeUntil, interval, Observable, from } from 'rxjs';
+import { mergeMap } from 'rxjs/operators';
 import { SupabaseService } from '../../services/supabase.service';
 
 interface NormalizedSignal {
@@ -53,6 +54,7 @@ interface NormalizedSignal {
   positionBefore: string;
   positionAfter: string;
   raw_alert_payload: any;
+  exitPrice: number | null;
 }
 
 interface SmartTrendTrade {
@@ -68,6 +70,11 @@ interface SmartTrendTrade {
   holdTimeText?: string;
   resultPct?: number;
   movePct: number;
+  quantity?: number;
+  plPerShare?: number;
+  paperPl?: number;
+  modeledExitPrice?: number | null;
+  fillBasis?: 'TARGET_LEVEL' | 'STOP_LEVEL' | 'EVENT_PRICE' | 'UNKNOWN';
 }
 
 @Component({
@@ -88,6 +95,11 @@ interface SmartTrendTrade {
             SmartTrend Core — Experimental Paper Test
             <span class="warning-badge">PAPER TEST ONLY — Backtest Not Yet Profitable</span>
           </h2>
+          <div class="allocation-control" style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+            <label style="font-size: 0.75rem; color: #9ca3af;">Paper Allocation / Trade:</label>
+            <span style="color: #9ca3af; font-size: 0.75rem;">$</span>
+            <input type="number" [(ngModel)]="paperAllocation" (ngModelChange)="onAllocationChange()" min="100" class="alloc-input" style="width: 80px; background: #0f1115; border: 1px solid #27272a; color: #e5e7eb; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem;" />
+          </div>
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
           <button class="manual-refresh-btn" (click)="fetchData(true)" [disabled]="loading">
@@ -117,6 +129,20 @@ interface SmartTrendTrade {
           <span class="card-lbl">Exits Today</span>
         </div>
         <div class="summary-card">
+          <span class="card-val" [class.positive]="paperPlToday > 0" [class.negative]="paperPlToday < 0">
+            \${{ paperPlToday | number: '1.2-2' }}
+          </span>
+          <span class="card-lbl">Paper P/L Today</span>
+        </div>
+        <div class="summary-card">
+          <span class="card-val" style="color: #4ade80;">{{ winningTradesToday }}</span>
+          <span class="card-lbl">Wins Today</span>
+        </div>
+        <div class="summary-card">
+          <span class="card-val" style="color: #f87171;">{{ losingTradesToday }}</span>
+          <span class="card-lbl">Losses Today</span>
+        </div>
+        <div class="summary-card">
           <span class="card-val">{{ targetsTodayCount }}</span>
           <span class="card-lbl">Targets Today</span>
         </div>
@@ -132,10 +158,10 @@ interface SmartTrendTrade {
           <span class="card-val">{{ eodExitsTodayCount }}</span>
           <span class="card-lbl">EOD Exits</span>
         </div>
-        <div class="summary-card" *ngIf="unknownExitsTodayCount > 0">
-          <span class="card-val" style="color: #c084fc;">{{ unknownExitsTodayCount }}</span>
-          <span class="card-lbl">Unknown Exits</span>
-        </div>
+      </div>
+
+      <div class="disclaimer-bar" style="font-size: 0.65rem; color: #6b7280; margin-bottom: 12px; font-style: italic;">
+        * Paper P/L excludes commission, slippage, borrow fees, and actual execution. This is modeled paper trading only, not actual realized brokerage profit.
       </div>
 
       <!-- Filter Panel (Matte Charcoal style) -->
@@ -247,7 +273,7 @@ interface SmartTrendTrade {
       <div *ngIf="allTrades.length > 0 && !errorMessage" class="tables-grid">
         
         <!-- Active Longs Table -->
-        <div class="table-wrapper bullish-wrapper" *ngIf="viewActive">
+        <div class="active-table-wrapper bullish-wrapper" *ngIf="viewActive">
           <div class="table-title bullish-title">
             🟢 ACTIVE LONGS ({{ totalActiveLongs }} positions)
           </div>
@@ -279,7 +305,7 @@ interface SmartTrendTrade {
                     </span>
                   </td>
                   <td class="price-col">\${{ getEntryPrice(t) | number: '1.2-2' }}</td>
-                  <td class="price-col">\${{ t.open?.current_price | number: '1.2-2' }}</td>
+                  <td class="price-col">{{ getCurrentPriceDisplay(t) }}</td>
                   <td class="pct-col" [class.positive]="t.movePct >= 0" [class.negative]="t.movePct < 0">
                     {{ t.movePct | number: '1.2-2' }}%
                   </td>
@@ -288,7 +314,7 @@ interface SmartTrendTrade {
                   <td class="time-col">{{ t.openedTime | date: 'MM/dd hh:mm a' }}</td>
                   <td class="time-col">{{ t.ageText }}</td>
                   <td style="text-align: center;">
-                    <span class="status-lbl" [class]="t.open?.status">{{ t.open?.status | uppercase }}</span>
+                    <span class="status-lbl" [class]="getDerivedStatus(t).toLowerCase().replace(' ', '-')">{{ getStatusDisplay(getDerivedStatus(t)) }}</span>
                   </td>
                   <td class="actions-cell">
                     <button class="mini-btn info" type="button" (click)="openModal(t); $event.stopPropagation()" aria-label="Details">ℹ️</button>
@@ -305,7 +331,7 @@ interface SmartTrendTrade {
         </div>
 
         <!-- Active Shorts Table -->
-        <div class="table-wrapper bearish-wrapper" *ngIf="viewActive">
+        <div class="active-table-wrapper bearish-wrapper" *ngIf="viewActive">
           <div class="table-title bearish-title">
             🔴 ACTIVE SHORTS ({{ totalActiveShorts }} positions)
           </div>
@@ -337,7 +363,7 @@ interface SmartTrendTrade {
                     </span>
                   </td>
                   <td class="price-col">\${{ getEntryPrice(t) | number: '1.2-2' }}</td>
-                  <td class="price-col">\${{ t.open?.current_price | number: '1.2-2' }}</td>
+                  <td class="price-col">{{ getCurrentPriceDisplay(t) }}</td>
                   <td class="pct-col" [class.positive]="t.movePct >= 0" [class.negative]="t.movePct < 0">
                     {{ t.movePct | number: '1.2-2' }}%
                   </td>
@@ -346,7 +372,7 @@ interface SmartTrendTrade {
                   <td class="time-col">{{ t.openedTime | date: 'MM/dd hh:mm a' }}</td>
                   <td class="time-col">{{ t.ageText }}</td>
                   <td style="text-align: center;">
-                    <span class="status-lbl" [class]="t.open?.status">{{ t.open?.status | uppercase }}</span>
+                    <span class="status-lbl" [class]="getDerivedStatus(t).toLowerCase().replace(' ', '-')">{{ getStatusDisplay(getDerivedStatus(t)) }}</span>
                   </td>
                   <td class="actions-cell">
                     <button class="mini-btn info" type="button" (click)="openModal(t); $event.stopPropagation()" aria-label="Details">ℹ️</button>
@@ -363,19 +389,22 @@ interface SmartTrendTrade {
         </div>
 
         <!-- Recent Exits full width table -->
-        <div class="table-wrapper full-width-wrapper" style="grid-column: span 2;">
+        <div class="exits-table-wrapper" *ngIf="viewClosedToday || viewOlderHistory">
           <div class="table-title exits-title">
             Recent Closed Trades / Exits
           </div>
-          <div class="table-scroll" style="max-height: 400px;">
+          <div class="table-scroll">
             <table class="screener-table">
               <thead>
                 <tr>
                   <th (click)="toggleSort('symbol')" class="sortable-th">Symbol <span *ngIf="sortKey === 'symbol'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th>Side</th>
                   <th (click)="toggleSort('source')" class="sortable-th">Entry Src <span *ngIf="sortKey === 'source'">{{ sortAsc ? '▲' : '▼' }}</span></th>
+                  <th>Qty</th>
                   <th (click)="toggleSort('entry')" class="sortable-th">Entry <span *ngIf="sortKey === 'entry'">{{ sortAsc ? '▲' : '▼' }}</span></th>
-                  <th>Exit</th>
+                  <th>Exit Price</th>
+                  <th>P/L / Share</th>
+                  <th>Paper P/L $</th>
                   <th (click)="toggleSort('result')" class="sortable-th">Result % <span *ngIf="sortKey === 'result'">{{ sortAsc ? '▲' : '▼' }}</span></th>
                   <th>Exit Reason</th>
                   <th (click)="toggleSort('opened')" class="sortable-th">Opened <span *ngIf="sortKey === 'opened'">{{ sortAsc ? '▲' : '▼' }}</span></th>
@@ -396,13 +425,20 @@ interface SmartTrendTrade {
                     </span>
                   </td>
                   <td>{{ t.open?.entrySource || 'ORPHAN' }}</td>
+                  <td class="price-col">{{ t.quantity }}</td>
                   <td class="price-col">\${{ getEntryPrice(t) | number: '1.2-2' }}</td>
-                  <td class="price-col">\${{ t.close?.trigger_price | number: '1.2-2' }}</td>
+                  <td class="price-col">\${{ t.modeledExitPrice | number: '1.2-2' }}</td>
+                  <td class="price-col" [class.positive]="t.plPerShare !== undefined && t.plPerShare > 0" [class.negative]="t.plPerShare !== undefined && t.plPerShare < 0">
+                    \${{ t.plPerShare | number: '1.2-2' }}
+                  </td>
+                  <td class="price-col" [class.positive]="t.paperPl !== undefined && t.paperPl > 0" [class.negative]="t.paperPl !== undefined && t.paperPl < 0">
+                    \${{ t.paperPl | number: '1.2-2' }}
+                  </td>
                   <td class="pct-col" [class.positive]="t.resultPct !== undefined && t.resultPct >= 0" [class.negative]="t.resultPct !== undefined && t.resultPct < 0">
                     {{ t.resultPct !== undefined ? (t.resultPct | number: '1.2-2') + '%' : 'N/A' }}
                   </td>
                   <td>
-                    <span class="exit-reason-badge" [class]="resolveReasonCategory(t.close?.primaryReason).toLowerCase()" [title]="getReasonExplanation(t.close?.primaryReason)">
+                    <span class="exit-reason-badge" [class]="resolveReasonCategory(t.close?.primaryReason).toLowerCase()" [title]="getReasonExplanation(t.close?.primaryReason) + ' (' + t.fillBasis + ')'">
                       {{ getExitReasonShortCode(t.close?.primaryReason) }}
                     </span>
                   </td>
@@ -410,7 +446,7 @@ interface SmartTrendTrade {
                   <td class="time-col">{{ t.closedTime | date: 'MM/dd hh:mm a' }}</td>
                   <td class="time-col">{{ t.holdTimeText || 'N/A' }}</td>
                   <td style="text-align: center;">
-                    <span class="status-lbl" [class]="t.close?.status">{{ t.close?.status | uppercase }}</span>
+                    <span class="status-lbl" [class]="t.close?.status">{{ getStatusDisplay(getDerivedStatus(t)) }}</span>
                   </td>
                   <td class="actions-cell">
                     <button class="mini-btn info" type="button" (click)="openModal(t); $event.stopPropagation()" aria-label="Details">ℹ️</button>
@@ -419,7 +455,7 @@ interface SmartTrendTrade {
                   </td>
                 </tr>
                 <tr *ngIf="filteredClosedTrades.length === 0">
-                  <td colspan="12" class="empty-row">No closed trades match filters.</td>
+                  <td colspan="15" class="empty-row">No closed trades match filters.</td>
                 </tr>
               </tbody>
             </table>
@@ -462,6 +498,14 @@ interface SmartTrendTrade {
                 </span>
               </div>
               <div class="detail-row">
+                <span class="detail-label">Display Status:</span>
+                <span class="detail-val">{{ getStatusDisplay(getDerivedStatus(selectedTrade)) }}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Raw DB Status:</span>
+                <span class="detail-val">{{ selectedTrade.open?.status || selectedTrade.close?.status || 'N/A' }}</span>
+              </div>
+              <div class="detail-row">
                 <span class="detail-label">Opened Time:</span>
                 <span class="detail-val">{{ selectedTrade.openedTime | date: 'yyyy-MM-dd hh:mm:ss a' }}</span>
               </div>
@@ -471,7 +515,7 @@ interface SmartTrendTrade {
               </div>
               <div class="detail-row" *ngIf="selectedTrade.type === 'ACTIVE'">
                 <span class="detail-label">Current Price:</span>
-                <span class="detail-val">\${{ selectedTrade.open?.current_price | number: '1.2-2' }}</span>
+                <span class="detail-val">{{ getCurrentPriceDisplay(selectedTrade) }}</span>
               </div>
               <div class="detail-row" *ngIf="selectedTrade.type === 'ACTIVE'">
                 <span class="detail-label">Unrealized Move:</span>
@@ -514,13 +558,35 @@ interface SmartTrendTrade {
 
               <!-- Closed trade specific fields -->
               <ng-container *ngIf="selectedTrade.type === 'CLOSED' || selectedTrade.type === 'ORPHAN'">
+                <div class="detail-row">
+                  <span class="detail-label">Modeled Qty:</span>
+                  <span class="detail-val">{{ selectedTrade.quantity }} shares</span>
+                </div>
                 <div class="detail-row" *ngIf="selectedTrade.close">
                   <span class="detail-label">Exit Action:</span>
                   <span class="detail-val">{{ selectedTrade.close.action }}</span>
                 </div>
                 <div class="detail-row" *ngIf="selectedTrade.close">
-                  <span class="detail-label">Exit Price:</span>
-                  <span class="detail-val">\${{ selectedTrade.close.trigger_price | number: '1.2-2' }}</span>
+                  <span class="detail-label">Modeled Exit Price:</span>
+                  <span class="detail-val" style="font-weight: 600;">\${{ selectedTrade.modeledExitPrice | number: '1.2-2' }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Fill Basis:</span>
+                  <span class="detail-val" [title]="getFillBasisExplanation(selectedTrade.fillBasis)" style="text-decoration: underline dotted; cursor: help;">
+                    {{ selectedTrade.fillBasis }}
+                  </span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">P/L Per Share:</span>
+                  <span class="detail-val" [class.positive]="selectedTrade.plPerShare !== undefined && selectedTrade.plPerShare > 0" [class.negative]="selectedTrade.plPerShare !== undefined && selectedTrade.plPerShare < 0">
+                    \${{ selectedTrade.plPerShare | number: '1.2-2' }}
+                  </span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Paper P/L Dollar:</span>
+                  <span class="detail-val" [class.positive]="selectedTrade.paperPl !== undefined && selectedTrade.paperPl > 0" [class.negative]="selectedTrade.paperPl !== undefined && selectedTrade.paperPl < 0" style="font-weight: 600;">
+                    \${{ selectedTrade.paperPl | number: '1.2-2' }}
+                  </span>
                 </div>
                 <div class="detail-row" *ngIf="selectedTrade.close">
                   <span class="detail-label">Exit Reason:</span>
@@ -551,6 +617,9 @@ interface SmartTrendTrade {
               </p>
               <p *ngIf="selectedTrade.close?.primaryReason">
                 <strong>Exit Reason:</strong> {{ getReasonExplanation(selectedTrade.close?.primaryReason) }}
+              </p>
+              <p style="font-style: italic; font-size: 0.65rem; color: #9ca3af; margin-top: 4px;">
+                * Paper P/L calculations are modeled estimations using configured price targets / stops or event receipt timestamps, and do not represent actual brokerage transactions or fills.
               </p>
             </div>
           </div>
@@ -756,16 +825,42 @@ interface SmartTrendTrade {
     /* Tables Layout */
     .tables-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 14px;
+      align-items: stretch;
     }
-    .table-wrapper {
+    .active-table-wrapper {
+      height: clamp(300px, 38vh, 440px);
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
       background: #161a22;
       border-radius: 6px;
       border: 1px solid #22252a;
-      overflow: hidden;
+    }
+    .active-table-wrapper .table-scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      background: rgba(30, 41, 59, 0.15);
+    }
+    .exits-table-wrapper {
+      height: clamp(220px, 30vh, 360px);
+      min-width: 0;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
+      grid-column: span 2;
+      background: #161a22;
+      border-radius: 6px;
+      border: 1px solid #22252a;
+    }
+    .exits-table-wrapper .table-scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      background: rgba(30, 41, 59, 0.15);
     }
     .table-title {
       padding: 8px 12px;
@@ -786,13 +881,6 @@ interface SmartTrendTrade {
       background: rgba(156, 163, 175, 0.08);
       color: #e5e7eb;
     }
-    .table-scroll {
-      overflow-x: auto;
-      overflow-y: auto;
-      flex-grow: 1;
-      max-height: 400px;
-      background: rgba(30, 41, 59, 0.15);
-    }
     .table-scroll::-webkit-scrollbar {
       width: 6px;
       height: 6px;
@@ -809,7 +897,10 @@ interface SmartTrendTrade {
       font-size: 0.7rem;
       text-align: left;
     }
-    .screener-table th {
+    .screener-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 5;
       background: #1a1e27;
       color: #9ca3af;
       font-weight: 500;
@@ -1091,9 +1182,9 @@ interface SmartTrendTrade {
 
     @media (max-width: 1024px) {
       .tables-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
       }
-      .table-wrapper.full-width-wrapper {
+      .exits-table-wrapper {
         grid-column: span 1;
       }
     }
@@ -1117,6 +1208,15 @@ export class SmartTrend implements OnInit, OnDestroy {
   structureExitsTodayCount = 0;
   eodExitsTodayCount = 0;
   unknownExitsTodayCount = 0;
+
+  // Paper P/L properties
+  paperAllocation: number = 10000;
+  paperPlToday: number = 0;
+  winningTradesToday: number = 0;
+  losingTradesToday: number = 0;
+
+  // Live prices mapping
+  livePrices: { [symbol: string]: { price: number; time: number } } = {};
 
   // Filter States
   searchQuery: string = '';
@@ -1161,6 +1261,11 @@ export class SmartTrend implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
+    const savedAlloc = localStorage.getItem('nss_smarttrend_allocation');
+    if (savedAlloc) {
+      this.paperAllocation = Number(savedAlloc);
+    }
+
     this.fetchData(false);
 
     // Auto-refresh every 30 seconds
@@ -1168,6 +1273,13 @@ export class SmartTrend implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
         this.fetchData(false);
+      });
+
+    // Auto-poll active quotes every 30 seconds
+    interval(30000)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.pollActiveQuotes();
       });
   }
 
@@ -1241,6 +1353,9 @@ export class SmartTrend implements OnInit, OnDestroy {
     const primaryReason = row.primary_reason || payload.primaryReason || '';
     const positionBefore = row.position_before !== undefined && row.position_before !== null ? row.position_before : (payload.positionBefore !== undefined ? payload.positionBefore : '');
     const positionAfter = row.position_after !== undefined && row.position_after !== null ? row.position_after : (payload.positionAfter !== undefined ? payload.positionAfter : '');
+    const exitPrice = row.exit_price !== undefined && row.exit_price !== null
+      ? Number(row.exit_price)
+      : (payload.exitPrice !== undefined && payload.exitPrice !== null ? Number(payload.exitPrice) : null);
 
     return {
       ...row,
@@ -1251,7 +1366,8 @@ export class SmartTrend implements OnInit, OnDestroy {
       primaryReason,
       positionBefore,
       positionAfter,
-      raw_alert_payload: payload
+      raw_alert_payload: payload,
+      exitPrice
     };
   }
 
@@ -1309,23 +1425,30 @@ export class SmartTrend implements OnInit, OnDestroy {
       let resultPct: number | undefined;
       let holdTimeText = '';
       
+      let modeledExitPrice: number | null = null;
+      let fillBasis: any = 'UNKNOWN';
+
       if (g.open && g.close) {
         type = 'CLOSED';
         side = g.open.action === 'BUY' ? 'LONG' : 'SHORT';
         symbol = g.open.symbol;
         openedTime = g.open.signal_bar_time;
         closedTime = g.close.signal_bar_time;
-        
-        // Calculate result percent
-        const entry = g.open.trigger_price || g.open.entry_price_est || 1;
-        const exit = g.close.trigger_price || 0;
+
+        const dummyTrade: SmartTrendTrade = {
+          tradeId, open: g.open, close: g.close, type, side, symbol
+        } as any;
+        modeledExitPrice = this.getModeledExitPrice(dummyTrade);
+        fillBasis = this.getFillBasis(dummyTrade);
+
+        const entry = this.getEntryPrice(dummyTrade) || 1;
+        const exit = modeledExitPrice || entry;
         if (side === 'LONG') {
           resultPct = ((exit - entry) / entry) * 100;
         } else {
           resultPct = ((entry - exit) / entry) * 100;
         }
 
-        // Hold time
         const ms = new Date(closedTime).getTime() - new Date(openedTime).getTime();
         holdTimeText = this.formatDuration(ms);
       } else if (g.open) {
@@ -1338,6 +1461,20 @@ export class SmartTrend implements OnInit, OnDestroy {
         side = g.close.action === 'EXIT_LONG' ? 'LONG' : 'SHORT';
         symbol = g.close.symbol;
         closedTime = g.close.signal_bar_time;
+
+        const dummyTrade: SmartTrendTrade = {
+          tradeId, open: g.open, close: g.close, type, side, symbol
+        } as any;
+        modeledExitPrice = this.getModeledExitPrice(dummyTrade);
+        fillBasis = this.getFillBasis(dummyTrade);
+
+        const entry = this.getEntryPrice(dummyTrade) || 1;
+        const exit = modeledExitPrice || entry;
+        if (side === 'LONG') {
+          resultPct = ((exit - entry) / entry) * 100;
+        } else {
+          resultPct = ((entry - exit) / entry) * 100;
+        }
       }
 
       trades.push({
@@ -1352,7 +1489,9 @@ export class SmartTrend implements OnInit, OnDestroy {
         resultPct,
         holdTimeText,
         movePct: 0,
-        ageText: ''
+        ageText: '',
+        modeledExitPrice,
+        fillBasis
       });
     }
 
@@ -1365,17 +1504,22 @@ export class SmartTrend implements OnInit, OnDestroy {
   updateDynamicFields() {
     const now = Date.now();
     for (const t of this.allTrades) {
+      const entry = this.getEntryPrice(t);
       if (t.type === 'ACTIVE' && t.open) {
-        const entry = t.open.trigger_price || t.open.entry_price_est || 1;
-        const current = t.open.current_price || entry;
+        const current = this.getCurrentPrice(t) || entry;
         if (t.side === 'LONG') {
-          t.movePct = ((current - entry) / entry) * 100;
+          t.movePct = entry > 0 ? ((current - entry) / entry) * 100 : 0;
         } else {
-          t.movePct = ((entry - current) / entry) * 100;
+          t.movePct = entry > 0 ? ((entry - current) / entry) * 100 : 0;
         }
 
         const openedMs = new Date(t.openedTime!).getTime();
         t.ageText = this.formatDuration(now - openedMs);
+      } else if (t.type === 'CLOSED') {
+        const exit = t.modeledExitPrice !== undefined && t.modeledExitPrice !== null ? t.modeledExitPrice : entry;
+        t.quantity = entry > 0 ? Math.floor(this.paperAllocation / entry) : 0;
+        t.plPerShare = t.side === 'LONG' ? (exit - entry) : (entry - exit);
+        t.paperPl = t.quantity * t.plPerShare;
       }
     }
   }
@@ -1389,6 +1533,10 @@ export class SmartTrend implements OnInit, OnDestroy {
     this.structureExitsTodayCount = 0;
     this.eodExitsTodayCount = 0;
     this.unknownExitsTodayCount = 0;
+
+    this.paperPlToday = 0;
+    this.winningTradesToday = 0;
+    this.losingTradesToday = 0;
 
     for (const t of this.allTrades) {
       if (t.type === 'ACTIVE') {
@@ -1404,6 +1552,10 @@ export class SmartTrend implements OnInit, OnDestroy {
           else if (cat === 'EMA_VWAP_LOSS') this.structureExitsTodayCount++;
           else if (cat === 'END_OF_DAY') this.eodExitsTodayCount++;
           else this.unknownExitsTodayCount++;
+
+          this.paperPlToday += t.paperPl || 0;
+          if ((t.paperPl || 0) > 0) this.winningTradesToday++;
+          else if ((t.paperPl || 0) < 0) this.losingTradesToday++;
         }
       }
     }
@@ -1487,6 +1639,204 @@ export class SmartTrend implements OnInit, OnDestroy {
       : (open.target2_price || 0);
   }
 
+  getModeledExitPrice(trade: SmartTrendTrade): number | null {
+    const open = trade.open;
+    const close = trade.close;
+
+    if (close && close.raw_alert_payload?.fillBasis && close.exitPrice !== null && close.exitPrice > 0) {
+      return close.exitPrice;
+    }
+
+    const reason = close?.primaryReason || '';
+    const cat = this.resolveReasonCategory(reason);
+
+    if (cat === 'TARGET') {
+      if (open) {
+        if (open.target1_price !== null && open.target1_price > 0) return open.target1_price;
+        if (open.target2_price !== null && open.target2_price > 0) return open.target2_price;
+      }
+      return null;
+    }
+
+    if (cat === 'STOP') {
+      if (open && open.stop_price !== null && open.stop_price > 0) return open.stop_price;
+      return null;
+    }
+
+    if (cat === 'EMA_VWAP_LOSS' || cat === 'END_OF_DAY' || cat === 'UNKNOWN') {
+      if (close) {
+        if (close.exitPrice !== null && close.exitPrice > 0) return close.exitPrice;
+        if (close.trigger_price !== null && close.trigger_price > 0) return close.trigger_price;
+      }
+      return null;
+    }
+
+    return null;
+  }
+
+  getFillBasis(trade: SmartTrendTrade): 'TARGET_LEVEL' | 'STOP_LEVEL' | 'EVENT_PRICE' | 'UNKNOWN' {
+    const close = trade.close;
+    if (close && close.raw_alert_payload?.fillBasis) {
+      const fb = close.raw_alert_payload.fillBasis.toUpperCase();
+      if (fb === 'TARGET_LEVEL' || fb === 'STOP_LEVEL' || fb === 'EVENT_PRICE') {
+        return fb as any;
+      }
+    }
+    const reason = close?.primaryReason || '';
+    const cat = this.resolveReasonCategory(reason);
+    if (cat === 'TARGET') return 'TARGET_LEVEL';
+    if (cat === 'STOP') return 'STOP_LEVEL';
+    if (cat === 'EMA_VWAP_LOSS' || cat === 'END_OF_DAY' || cat === 'UNKNOWN') {
+      if (close && (close.exitPrice !== null || close.trigger_price !== null)) {
+        return 'EVENT_PRICE';
+      }
+    }
+    return 'UNKNOWN';
+  }
+
+  getDerivedStatus(t: SmartTrendTrade): string {
+    if (t.type === 'CLOSED') return 'CLOSED';
+    if (t.type === 'ORPHAN') return 'ORPHAN';
+    
+    const open = t.open;
+    if (!open) return 'ORPHAN';
+
+    const entry = this.getEntryPrice(t);
+    const current = this.getCurrentPrice(t);
+    const target = this.getTargetPrice(open);
+    const stop = open.stop_price || 0;
+
+    if (current && entry > 0) {
+      if (t.side === 'LONG') {
+        if (target > 0 && current >= target) return 'TARGET TOUCHED';
+        if (stop > 0 && current <= stop) return 'STOP TOUCHED';
+      } else {
+        if (target > 0 && current <= target) return 'TARGET TOUCHED';
+        if (stop > 0 && current >= stop) return 'STOP TOUCHED';
+      }
+    }
+
+    const openTimeStr = open.signal_bar_time;
+    if (openTimeStr) {
+      const openTime = new Date(openTimeStr);
+      if (!isNaN(openTime.getTime())) {
+        const nowET = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
+        const openET = openTime.toLocaleString("en-US", { timeZone: "America/New_York" });
+        
+        const nowDateStr = new Date(nowET).toLocaleDateString();
+        const openDateStr = new Date(openET).toLocaleDateString();
+        
+        const nowTimeStr = new Date(nowET).toTimeString().substring(0, 5); // "HH:MM"
+        
+        if (nowDateStr !== openDateStr || nowTimeStr > '16:00') {
+          return 'EXIT ALERT MISSING';
+        }
+      }
+    }
+
+    const openTime = new Date(open.signal_bar_time);
+    if (!isNaN(openTime.getTime())) {
+      const ageMs = Date.now() - openTime.getTime();
+      if (ageMs < 120 * 60 * 1000) {
+        return 'FRESH';
+      }
+    }
+
+    return 'STALE';
+  }
+
+  getStatusDisplay(status: string): string {
+    if (status === 'TARGET TOUCHED') return 'TARGET TOUCHED — Awaiting Pine Exit';
+    if (status === 'STOP TOUCHED') return 'STOP TOUCHED — Awaiting Pine Exit';
+    return status;
+  }
+
+  getFillBasisExplanation(basis: string | undefined): string {
+    if (basis === 'TARGET_LEVEL') return 'TARGET_LEVEL: Modeled paper fill at configured profit target (Not actual broker execution).';
+    if (basis === 'STOP_LEVEL') return 'STOP_LEVEL: Modeled paper fill at configured protective stop loss (Not actual broker execution).';
+    if (basis === 'EVENT_PRICE') return 'EVENT_PRICE: Exit filled at the event-specified transaction price.';
+    return 'UNKNOWN: Unknown fill basis.';
+  }
+
+  getActiveSymbols(): string[] {
+    const symbols = new Set<string>();
+    for (const t of this.allTrades) {
+      if (t.type === 'ACTIVE' && t.symbol && t.symbol !== 'STDEMO') {
+        symbols.add(t.symbol);
+      }
+    }
+    return Array.from(symbols);
+  }
+
+  pollActiveQuotes() {
+    const symbols = this.getActiveSymbols();
+    if (symbols.length === 0) return;
+
+    from(symbols)
+      .pipe(
+        mergeMap(sym => this.fetchQuote(sym), 4),
+        takeUntil(this.destroy$)
+      )
+      .subscribe({
+        next: (res) => {
+          if (res.price > 0) {
+            this.livePrices[res.symbol] = { price: res.price, time: Date.now() };
+            this.updateDynamicFields();
+            this.applyFilters();
+          }
+        },
+        error: (err) => console.error('Error polling quotes:', err)
+      });
+  }
+
+  fetchQuote(symbol: string): Observable<{ symbol: string; price: number }> {
+    const url = `/.netlify/functions/finnhub-proxy?path=/quote&symbol=${encodeURIComponent(symbol)}`;
+    return new Observable<{ symbol: string; price: number }>(subscriber => {
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          const price = data && typeof data.c === 'number' ? data.c : 0;
+          subscriber.next({ symbol, price });
+          subscriber.complete();
+        })
+        .catch(err => {
+          console.warn(`Failed to fetch quote for ${symbol}:`, err);
+          subscriber.next({ symbol, price: 0 });
+          subscriber.complete();
+        });
+    });
+  }
+
+  getCurrentPrice(t: SmartTrendTrade): number {
+    const symbol = t.symbol;
+    if (this.livePrices[symbol]) {
+      return this.livePrices[symbol].price;
+    }
+    if (t.open && t.open.current_price) {
+      return t.open.current_price;
+    }
+    return 0;
+  }
+
+  getCurrentPriceDisplay(t: SmartTrendTrade): string {
+    const symbol = t.symbol;
+    if (this.livePrices[symbol]) {
+      return '$' + this.livePrices[symbol].price.toFixed(2);
+    }
+    if (t.open && t.open.current_price) {
+      return '$' + t.open.current_price.toFixed(2) + ' (stale)';
+    }
+    return '--';
+  }
+
+  onAllocationChange() {
+    if (this.paperAllocation < 100) this.paperAllocation = 100;
+    localStorage.setItem('nss_smarttrend_allocation', String(this.paperAllocation));
+    this.updateDynamicFields();
+    this.calculateSummary();
+    this.applyFilters();
+  }
+
   applyFilters() {
     this.updateDynamicFields();
 
@@ -1548,8 +1898,9 @@ export class SmartTrend implements OnInit, OnDestroy {
 
       // 6. Status filter
       if (t.open) {
-        const isFresh = t.open.status === 'fresh';
-        const isStale = t.open.status === 'stale' || t.open.status === 'expired';
+        const derived = this.getDerivedStatus(t);
+        const isFresh = derived === 'FRESH' || derived === 'TARGET TOUCHED' || derived === 'STOP TOUCHED' || derived === 'EXIT ALERT MISSING';
+        const isStale = derived === 'STALE';
         if (isFresh && !this.statusFresh) continue;
         if (isStale && !this.statusStale) continue;
       }
