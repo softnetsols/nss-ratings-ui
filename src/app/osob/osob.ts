@@ -916,7 +916,9 @@ export class Osob implements OnInit, OnDestroy {
             return s;
           }).filter(s => !!s.symbol && (
             s.strategy_name === 'osob_reversion' || 
-            s.group_name?.startsWith('OSOB')
+            s.strategy_name === 'osob' ||
+            (s.strategy_name && s.strategy_name.toLowerCase().includes('osob')) ||
+            (s.group_name && s.group_name.toUpperCase().includes('OSOB'))
           ));
           
           this.applyFilters();

@@ -245,9 +245,11 @@ function processWatchlistV1(payload) {
       group_name = `NSS_SmartTrend_${exchange || 'UNKNOWN'}`;
     } else {
       direction = evType === 'BUY' ? 'bullish' : 'bearish';
+      const stratUpper = strategy ? strategy.toUpperCase() : '';
       strategy_name =
-        strategy === 'ALPHATREND' ? 'alphatrend_reversal' :
-        strategy === 'GOLDENCROSS' ? 'golden_death_cross' :
+        (stratUpper === 'ALPHATREND' || stratUpper === 'ALPHATREND_REVERSAL') ? 'alphatrend_reversal' :
+        (stratUpper === 'GOLDENCROSS' || stratUpper === 'GOLDEN_DEATH_CROSS') ? 'golden_death_cross' :
+        (stratUpper.includes('OSOB')) ? 'osob_reversion' :
         strategy ? strategy.toLowerCase() : '';
     }
 
